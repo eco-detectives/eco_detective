@@ -1,0 +1,60 @@
+---
+title: "Chap. 3"
+author: "Molly Wilson"
+date: "6/22/2018"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    number_sections: false
+---
+
+```{r, echo=FALSE, warning=FALSE}
+library(dplyr)
+```
+
+
+## 3.1 Binomial distribution
+
+#### Step 1
+Specify $p$ and $N$  
+$p$ = 0.1  
+$N$ = 7  
+
+#### Step 2
+Find $p(k,N)$ from equation 3.47
+$$p(0, N) = (1 - p)^N$$
+$$p(0,N) = (1-0.1)^7 = (0.9)^7 = 0.47$$
+
+#### Step 3 
+Find $p(k,N)$ from equation 3.48 (I will use dbinom... but I assume this is cheating?)
+```{r}
+k <- c(1:7) 
+k <- as.data.frame(k)
+
+results <- as.data.frame(apply(k, 2, dbinom, size=7, prob=0.1)) %>% select(p=k) %>% cbind(k) %>% select(k,p)
+```
+
+## 3.2 Poisson distribution
+
+#### Step 1
+Choose $r$, $t$, and $cutoff$  
+$r$ = 0.1  
+$t$ = 5  
+$cutoff$ = 0.999  
+
+#### Step 2
+Set: 
+$$p(0,t)=e^{-rt}$$
+$$SUM=p(0,t)$$
+
+#### Step 2
+Find $p(k,t)$ from equation 3.57
+$$p(k, t) = \frac{\lambda^k e^{-\lambda}}{k!} = \frac{(rt)^k e^{-rt}}{k!}$$
+
+```{r}
+
+```
+
+## 3.3

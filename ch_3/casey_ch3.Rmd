@@ -1,0 +1,249 @@
+---
+title: 'Eco-Detectives: chapter 3'
+author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float: yes
+    number_sections: true
+    theme: cerulean
+    highlight: haddock
+    includes: 
+      in_header: '~/github/src/templates/ohara_hdr.html'
+  pdf_document:
+    toc: true
+---
+
+``` {r setup, echo = TRUE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
+
+source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
+
+```
+
+# Chapter 3: Probability and Probability Models
+
+## Pseudocode 3.1
+
+Here we're implementing a binomial probability distribution to plot the probability of finding $k$ successes out of $N$ attempts.  Eqn 3.47 gives the probability of zero successes:
+
+$$p(0, N) = (1 - p)^N$$
+Eqn 3.48 gives the recursive formula to find $k$ successes based on the probability of finding $k - 1$ successes:
+\begin{align*}
+  p(k, N) &= \binom{N}{k} p^k (1 - p)^{N - k}\\
+    &= \left(\frac{N - k + 1}{k}\right) \left(\frac{p}{1-p}\right) p(k-1, N)
+\end{align*}
+
+Start by choosing values for $p$ and $N$.  Let's start with $p = 0.25$ and $N = 10$.
+
+``` {r ch 3 pseudocode 3-1}
+
+p <- 0.25
+N <- 10
+
+k_vec <- 0:N
+prob <- rep(NA, length(k_vec))
+
+for (i in seq_along(k_vec)) {
+  k <- k_vec[i]
+  prob[i] <- ifelse(k == 0,
+                    (1 - p)^N, 
+                      ### k = 0, so use 3.47
+                    (N - k + 1)/(k) * (p)/(1 - p) * prob[i-1])
+                      ### k > 0, so use 3.48 and refer to previous p(k-1, N)
+}
+binomial_df <- data.frame(k = k_vec, p = prob)
+                      
+ggplot(binomial_df, aes(x = k, y = p)) +
+  ggtheme_plot() +
+  geom_line() +
+  geom_point()
+```
+
+Let's try non-iteratively...
+
+``` {r ch 3 pseudocode 3-1 vectorized}
+
+N <- 100
+p_vals <- c(0.1, 0.25, 0.5, 0.75, .97)
+
+bin2_df <- data.frame(k = rep(0:N, times = length(p_vals)),
+                     p = rep(p_vals, each = N + 1)) %>%
+  mutate(prob = ifelse(k == 0,
+                      (1 - p)^N, 
+                        ### k = 0, so use 3.47
+                      choose(N, k) * p^k * (1 - p)^(N - k)))
+                        ### k > 0, so use the original eq 3.44
+                      
+ggplot(bin2_df, aes(x = k, y = prob, color = p)) +
+  ggtheme_plot() +
+  geom_line(aes(group = p)) +
+  geom_point()
+```
+
+Note there's a function `dbinom()` (and `pbinom`, `qbinom`, `rbinom`) that generate binomial density, distribution, quantile, and random numbers for a binomial distribution with `x`/`q`/`p`/`n` of outputs plus `size` (# trials) and `prob` (probability of success on each trial).
+
+## Pseudocode for multinomial
+
+Instead of 3.44 use eq. 3.50 in the code; if we want it as a data frame, instead of using several values for $p$ across a single $k_1$, we can use different values for $k_2, k_3, ...$.  Probably makes more sense to do it as a matrix if there are more than two or three $k_x$ values.
+
+## Pseudocode 3.2
+
+Here we're dealing with the Poisson distribution
+
+$$p(k, t) = \frac{\lambda^k e^{-\lambda}}{k!} = \frac{(rt)^k e^{-rt}}{k!}$$
+
+Specify $r$, $t$, and $cutoff$.  Since $rt$ takes the place of $\lambda$, $\mathbb{E}[x] = rt$ and $Var(x) = rt$.  We'll iterate over values of $k$ until the cumulative probability gets close to 1, i.e. the CDF instead of the PDF.
+
+```{r pseudocode 3-2}
+
+r <- .05
+t <- 40
+cutoff <- 0.9999
+k <- NA; prob = NA
+
+i <- 1
+k[1] <- 0
+prob[1]  <- exp(-r*t)
+sum_p <- prob[1]
+
+while(sum_p < cutoff) {
+  i <- i + 1
+  k[i] <- k[i-1] + 1
+  prob[i] <- r * t / k[i] * prob[i - 1]
+  
+  sum_p <- sum_p + prob[i]
+}
+
+poisson_df <- data.frame(k = k, prob = prob)
+
+ggplot(poisson_df, aes(x = k, y = prob)) + 
+  ggtheme_plot() +
+  geom_point() +
+  geom_line()
+```
+
+try non-iteratively
+
+```{r pseudocode 3-2 vectorized}
+
+r_vec <- c(0.01, 0.02, 0.05, .10, .25, .5)
+t <- 40
+cutoff <- 0.9999
+k_max <- 100
+
+poisson_df <- data.frame(k = rep(0:k_max, times = length(r_vec)), 
+                         r = rep(r_vec, each = k_max + 1),
+                         prob = NA) %>%
+  mutate(prob = exp(-r * t) * (r * t)^k / factorial(k)) %>%
+  group_by(r) %>%
+  mutate(CDF = cumsum(prob)) %>%
+  ungroup() %>%
+  filter(CDF < cutoff)
+
+ggplot(poisson_df, aes(x = k, y = prob, color = r)) + 
+  ggtheme_plot() +
+  geom_point() +
+  geom_line(aes(group = r))
+```
+
+## Pseudocode 3.3
+
+Here we're using a uniform distribution to select an integer result from a binomial distribution.  This is like using a cdfbinom (probably qbinom in R?) to translate uniform randoms to binomial randoms.  Let's skip the iterative and go straight to vector.
+
+``` {r pseudocode 3-3}
+
+qbinom1 <- function(N, k, p, U) {
+  qbinom1_df <- data.frame(N = N,
+                          k = rep(0:N, times = length(p_vec)),
+                          p = rep(p_vec, each = N + 1)) %>%
+    group_by(p) %>%
+    mutate(pdf = choose(N, k) * p^k * (1 - p)^(N - k),
+           cdf = cumsum(pdf)) %>%
+    filter(cdf > U) %>%
+    summarize(U = U, N = first(N), k_successes = first(k))
+
+  return(qbinom1_df)
+}
+
+N <- 100
+p_vec <- c(0.01, 0.05, 0.10, 0.2, 0.5, 0.75)
+
+U <- runif(50)
+
+qbinom_df <- lapply(U, FUN = function(x) {
+  qbinom1(N, k, p_vec, x)
+}) %>%
+  bind_rows()
+
+ggplot(qbinom_df, aes(y = U, x = k_successes, color = p)) +
+  ggtheme_plot() +
+  geom_point()
+```
+    
+## Pseudocode 3.4
+
+A Monte Carlo approach to simple population model with process and observation uncertainty.  This is based on Eq. 3.38, a simple population model based on exponential growth:
+$$N_{t+1} = sN_t + b_t + W_t,$$ 
+where $W_t$ represents process uncertainty, and
+$$N_{obs,t} = N_t + V_t,$$ 
+where $V_t$ represents observation uncertainty.
+
+Let's use the text values for $s = 0.8, b = 20$, and $N_0 = 50$.  Try iterating over different values for $\sigma_N, \sigma_W, \sigma_V$.
+
+``` {r pseudocode 3-4}
+
+pop_mdl <- function(s, b, N_0, sig_N, sig_W, sig_V) {
+  t_vec <- 1:50
+  N_vec <- rep(NA, 50)
+  N_obs <- rep(NA, 50)
+  
+  for (t in t_vec) {
+    if (t == 1) {
+      N_vec[t] <- N_0
+      N_obs[t] <- N_0 ### perfect observation in first time step
+    } else {
+      N_vec[t] <- s * N_vec[t - 1] + b + rnorm(n = 1, mean = 0, sd = sig_W)
+      N_obs[t] <- N_vec[t] + rnorm(n = 1, mean = 0, sd = sig_V)
+    }
+  }
+  N_df <- data.frame(t = t_vec,
+                     N_t = N_vec,
+                     N_obs = N_obs)
+  return(N_df)
+}
+
+pop_1 <- pop_mdl(s = .8, b = 20, N_0 = 50, sig_N = NA, sig_W = 10, sig_V = 5) %>%
+  mutate(N_tlead = lead(N_t))
+
+pop_lm <- lm(N_t ~ N_tlead, data = pop_1) 
+pop_lm_df <- pop_lm %>% broom::tidy() %>%
+  mutate(r2 = pop_lm %>% summary %>% .$adj.r.squared)
+
+ggplot(pop_1, aes(x = N_tlead, y = N_t)) +
+  ggtheme_plot() +
+  geom_point() +
+  geom_abline(intercept = pop_lm_df$estimate[1],
+              slope = pop_lm_df$estimate[2]) +
+  xlim(c(0, NA)) + ylim(c(0, NA)) +
+  labs(title = 'N_t vs N_{t-1}')
+ 
+ggplot(pop_1, aes(x = N_t, y = N_obs)) +
+  ggtheme_plot() +
+  geom_point() +
+  xlim(c(0, NA)) + ylim(c(0, NA)) +
+  labs(title = 'N vs N_obs')
+
+ggplot(pop_1, aes(x = t, y = N_t)) +
+  ggtheme_plot() +
+  geom_point() +
+  xlim(c(0, NA)) + ylim(c(0, NA)) +
+  labs(title = 'N_t vs time')
+
+```
+
+
