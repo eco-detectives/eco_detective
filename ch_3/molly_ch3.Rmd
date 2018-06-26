@@ -16,6 +16,9 @@ library(dplyr)
 
 
 # Binomial distribution
+
+$$p(0, N) = (1 - p)^N$$
+
 _Step 1:_ Specify *p* and *N*
 *p* = 0.1
 *N* = 7
@@ -32,6 +35,8 @@ results <- as.data.frame(apply(k, 2, dbinom, size=7, prob=0.1)) %>% select(p=k) 
 ```
 
 # Poisson distribution
+
+$$p(k, t) = \frac{\lambda^k e^{-\lambda}}{k!} = \frac{(rt)^k e^{-rt}}{k!}$$
 
 ```{r}
 
