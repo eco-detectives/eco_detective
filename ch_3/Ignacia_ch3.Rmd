@@ -53,6 +53,7 @@ while (sum < cutoff){
   p_k_t = ((r*t)/k)*p_k[i]
   p_k[i+1] = p_k_t 
   sum =  p_k_t + p_k[i]
+  
   i= i+1
   
 }
