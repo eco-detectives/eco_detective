@@ -1,0 +1,34 @@
+---
+title: "Excersises Ch.3"
+author: "Ignacia Rivera"
+date: "June 25, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Binomial probability distirbution 
+
+```{r binomial probability distribution}
+
+p= 0.2
+N= 1000
+
+p_0_N = (1 - p)^N
+
+store = rep(NA, N+1)
+store[1]= p_0_N
+
+
+for (k in 1:N){
+  
+  p_k_N = ((N-k+1)/k)*(p/(1-p))*store[k]
+  store[k+1] = p_k_N
+  
+}
+
+plot(seq(0:N), store, xlab="k", ylab="p(k)")
+```
+
