@@ -4,6 +4,10 @@ author: "Seba Tapia"
 date: "6/25/2018"
 output: html_document
 ---
+#Packages
+```{r packages}
+library(dplyr)
+```
 #PSEUDOCODE 3.1
 ##Step 1
 ```{r Pseudocode 3.1 Step 1}
@@ -18,17 +22,36 @@ Po <- (1-p)^N
 
 ##Step 3
 ```{r Pseudocode 3.1 Step 3}
-probKN <- function (N,p,k){
-  p=0.2
-  N=50
+probKN <- function (N=50,p=0.2,k){
   k <- seq(1,N,by=1)
   p.vec <- vector(length=length(k), "numeric")
-  p.vec[1] <- ((N-1+1)/1)*((p)/(1-p))*Po
-
+  p.vec[1] <- Po
   for (i in k) {
   p.vec[i+1] = ((N-k[i])/k[i])*((p)/(1-p))*p.vec[i]
-  
+  p.vec <- p.vec[1:50]
   }
+  plot(x=k, y=p.vec)
+  return(p.vec)
+  
+}
+probKN()
+```
+
+##An Ecological Scenario: Sampling for pests
+```{r Pseudocode Ecological Scenario: PESTS}
+probKNPest <- function (N=10,p=0.1,k){
+  k <- seq(1,N,by=1)
+  p.vec <- vector(length=length(k), "numeric")
+  p.vec[1] <- (1-p)^N
+  for (i in k) {
+  p.vec[i+1] = ((N-k[i])/k[i])*((p)/(1-p))*p.vec[i]
+  p.vec <- p.vec[1:11]
+  k <- k[1:11]
+  }
+  plot(x=k, y=p.vec)
   return(p.vec)
 }
+probKNPest()
+probKNPest(p=0.2)
+probKNPest(p=0.3)
 ```
