@@ -53,3 +53,30 @@ probKNPest()
 probKNPest(p=0.2)
 probKNPest(p=0.3)
 ```
+
+#Pseudocode 3.2
+```{r Pseudocode 3.2}
+r <- 0.05
+t <- 50
+cutoff <- 0.999
+Pot <- (2.71828)^(-r*t)
+Sum <- Pot
+
+MultiNomDist <- function(r=0.05,t=50, k){
+  k <- seq(1,t,by=1)
+  p.vec <- vector(length=length(k), "numeric")
+  p.vec[1] <- (2.71828)^(-r*t)
+  for (i in k){
+  p.vec[i+1] = ((r*t)/k[i+1])*(p.vec[i])
+  p.vec <- p.vec[1:t]
+  Sum[i] <- sum(p.vec[1:i+1])
+  #if(Sum[i] >= cutoff) {break}
+  
+  #k <- k[1:4]
+  }
+  plot(x=k, y=p.vec, type="l")
+}
+MultiNomDist()
+
+#I couldn't set the conditions for the loop to start if Sum >= cutoff
+```
