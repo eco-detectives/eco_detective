@@ -1,0 +1,191 @@
+---
+title: "Ch. 3 workbook - jcouture"
+output: html_notebook
+---
+
+```{r setup}
+library(tidyverse)
+```
+
+
+# Probability and probability models
+
+### The Binomial Distributuion
+
+**Pseudocode 3.1:** Ecological sampling for pests
+
+$$p(k,N)=\frac{N!}{k!(N-k)!}(p^{k}(1-p)^{N-k}$$
+$$=\left[\frac{N-k+1}{k}\right]\left[\frac{p}{1-p}\right]p(k-1,N)$$
+
+```{r pests0.1}
+ 
+p=0.1 #0.2, 0.3
+N=10
+
+kVec=1:N
+
+binom<-function(p,N=10){
+  pkN<-vector(length = length(kVec))
+  p0N=(1-p)^N
+  
+  for(i in 1:length(kVec)){
+  pkN[i]<-((N-kVec[i]+1)/kVec[i])*(p/(1-p))*ifelse(pkN<2,p0N,pkN[i-1])
+  }
+  
+  pkN0<-c(p0N,pkN)
+  print(pkN0)
+  
+  plot(c(0,kVec),binom0.1,main = paste("p = ",p,"N = 10"),xlab="k",ylab="p(k,N)")
+}
+
+binom0.1<-binom(0.1)
+
+binom0.1
+
+```
+
+```{r pests0.2}
+
+binom0.2<-binom(0.2)
+
+binom0.2
+
+```
+
+
+```{r pests0.3}
+
+binom0.3<-binom(0.3)
+binom0.3
+
+```
+
+
+### The Multinomial Distributuion
+
+**Pseudocode 3.1:** Ecological sampling for pests
+
+$$p(k_{1},k_{2},N)=\frac{N!}{k_{1}!k_{2}!}(p_{1}^{k_{1}}p_{2}^k_{2})$$
+
+```{r pests-multi}
+
+multinom<-function(p,N=10){
+  pkN<-vector(length = length(kVec))
+  p0N=(1-p)^N
+  
+  for(i in 1:length(kVec)){
+  pkN[i]<-((N-kVec[i]+1)/kVec[i])*(p/(1-p))*ifelse(pkN<2,p0N,pkN[i-1])
+  }
+  
+  pkN0<-c(p0N,pkN)
+  print(pkN0)
+}
+
+```
+
+###### ???
+
+### The Poisson Distributuion
+
+*"The binomial distribution id one for which the random variable takes discrete values in desrete eperiments of trials. In the same way, the Poisson distribution (or Poisson process to indicate that something is happening over time) is one for which the random variable takes discrete values during __continuous__ sampling*
+
+**Pseudocode 3.2:** Ecological sampling for pests
+
+$$p(k,t)=\frac{e^{-rt}(rt)^{k}}{k!}=\left(\frac{rt}{k}\right)p(k-1,t)$$
+
+```{r poisson}
+
+kvP<-c(seq(1,5,by=0.1))
+  
+poiss<-function(r,t,cut){
+  p0t<-exp(-r*t)
+  sum=p0t
+  
+  pkt<-vector(length = length(kVec))
+  
+  for(i in 1:length(kvP)){
+    pkt[i]<-(r*t/kvP[i])*ifelse(i<2,p0t,pkt[i-1])
+    sum<-sum+pkt[i]
+    
+    if (sum>cut) break
+  }
+  
+  pVec<-c(p0t,pkt)
+  #return(pVec)
+  
+  pDPlot<-plot(c(0,kvP),pVec,main = paste("Poisson\nr = ",r,", t =",t),xlab="k",ylab="sum(p(k,t))")
+  
+  return(pDPlot)
+}
+
+  poiss(0.5,3,10)
+
+
+```
+
+### The Gausian (normal) Distributuion
+
+*"The function f(x) is the familiar "bell-shaped curve," Plot it, if it is not completely familar; vary *m* and *\Sigma* to see how they affect the shape"*
+
+```{r gaussian}
+normPlt<-function(sig,m,rng){
+  gaus<-data.frame(x=seq(-rng,rng,by=0.5))
+  
+  gaus2<-gaus %>%
+    mutate(fx=(1/(sqrt(2*pi*sig))*exp((-(x-m)^2)/2*sig^2)))
+  
+  nplt<-plot(gaus2,main=paste("normal distribution\nsigma =",sig,"mean =",m),xlab="x",ylab="f(x)")
+return(nplt)
+}
+
+np<-normPlt(0.5,0,10)
+
+```
+
+### The Gamma Distributuion
+
+**Box 3.3:**
+
+```{r gamma}
+ 
+...?
+
+```
+
+
+### Binomial random variables
+
+**Pseudocode 3.3:** Generate individual random varibles from a specific distribution using the binomial distribution
+
+```{r binomRand}
+ 
+binRand<-function(N,p){
+  U<-runif(n = 1,min = 0,max = N)
+  k=0
+  suMv=rep(0,N+2)
+  RkVec<-seq(1,N,by=1)
+  RpkN<-numeric(length=length(RkVec))
+  p0N=(1-p)^N
+  
+   for(i in 1:length(RkVec)){
+  RpkN[i]<-((N-RkVec[i]+1)/RkVec[i])*(p/(1-p))*ifelse(i<2,p0N,RpkN[i-1])
+  suMv[i+1] = suMv[i]+RpkN[i]
+  #print(c(RpkN[i],U))
+  if(suMv[i+1]>=U) break
+  
+  } 
+
+#return(suMv)
+
+  kV=c(0:11)
+  biRPlt<-plot(x=kV,y=suMv,main=paste("binomial\nN =",N,"p =",p,"U=",round(U,3)),xlab="k",ylab="cumulative prob")
+return(biRPlt)
+}
+
+binRand(10,0.1)
+```
+
+
+
+
+
