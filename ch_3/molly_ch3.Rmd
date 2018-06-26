@@ -1,0 +1,39 @@
+---
+title: "Chap. 3"
+author: "Molly Wilson"
+date: "6/22/2018"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    number_sections: true
+---
+
+```{r}
+library(dplyr)
+```
+
+
+# Binomial distribution
+_Step 1:_ Specify *p* and *N*
+*p* = 0.1
+*N* = 7
+
+_Step 2:_ Find *p*(*k,N*) from equation 3.47
+*p*(0,*N*) = (1-0.1)^7 = (0.9)^7 = 0.47
+
+_Step 3_: Find *p*(*k,N*) from equation 3.48 (I will use dbinom... :) )
+```{r}
+k <- c(1:7) 
+k <- as.data.frame(k)
+
+results <- as.data.frame(apply(k, 2, dbinom, size=7, prob=0.1)) %>% select(p=k) %>% cbind(k) %>% select(k,p)
+```
+
+# Poisson distribution
+
+```{r}
+
+```
+
