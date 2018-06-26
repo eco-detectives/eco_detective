@@ -150,3 +150,100 @@ ggplot(poisson_df, aes(x = k, y = prob, color = r)) +
   geom_point() +
   geom_line(aes(group = r))
 ```
+
+## Pseudocode 3.3
+
+Here we're using a uniform distribution to select an integer result from a binomial distribution.  This is like using a cdfbinom (probably qbinom in R?) to translate uniform randoms to binomial randoms.  Let's skip the iterative and go straight to vector.
+
+``` {r pseudocode 3-3}
+
+qbinom1 <- function(N, k, p, U) {
+  qbinom1_df <- data.frame(N = N,
+                          k = rep(0:N, times = length(p_vec)),
+                          p = rep(p_vec, each = N + 1)) %>%
+    group_by(p) %>%
+    mutate(pdf = choose(N, k) * p^k * (1 - p)^(N - k),
+           cdf = cumsum(pdf)) %>%
+    filter(cdf > U) %>%
+    summarize(U = U, N = first(N), k_successes = first(k))
+
+  return(qbinom1_df)
+}
+
+N <- 100
+p_vec <- c(0.01, 0.05, 0.10, 0.2, 0.5, 0.75)
+
+U <- runif(50)
+
+qbinom_df <- lapply(U, FUN = function(x) {
+  qbinom1(N, k, p_vec, x)
+}) %>%
+  bind_rows()
+
+ggplot(qbinom_df, aes(y = U, x = k_successes, color = p)) +
+  ggtheme_plot() +
+  geom_point()
+```
+    
+## Pseudocode 3.4
+
+A Monte Carlo approach to simple population model with process and observation uncertainty.  This is based on Eq. 3.38, a simple population model based on exponential growth:
+$$N_{t+1} = sN_t + b_t + W_t,$$ 
+where $W_t$ represents process uncertainty, and
+$$N_{obs,t} = N_t + V_t,$$ 
+where $V_t$ represents observation uncertainty.
+
+Let's use the text values for $s = 0.8, b = 20$, and $N_0 = 50$.  Try iterating over different values for $\sigma_N, \sigma_W, \sigma_V$.
+
+``` {r pseudocode 3-4}
+
+pop_mdl <- function(s, b, N_0, sig_N, sig_W, sig_V) {
+  t_vec <- 1:50
+  N_vec <- rep(NA, 50)
+  N_obs <- rep(NA, 50)
+  
+  for (t in t_vec) {
+    if (t == 1) {
+      N_vec[t] <- N_0
+      N_obs[t] <- N_0 ### perfect observation in first time step
+    } else {
+      N_vec[t] <- s * N_vec[t - 1] + b + rnorm(n = 1, mean = 0, sd = sig_W)
+      N_obs[t] <- N_vec[t] + rnorm(n = 1, mean = 0, sd = sig_V)
+    }
+  }
+  N_df <- data.frame(t = t_vec,
+                     N_t = N_vec,
+                     N_obs = N_obs)
+  return(N_df)
+}
+
+pop_1 <- pop_mdl(s = .8, b = 20, N_0 = 50, sig_N = NA, sig_W = 10, sig_V = 5) %>%
+  mutate(N_tlead = lead(N_t))
+
+pop_lm <- lm(N_t ~ N_tlead, data = pop_1) 
+pop_lm_df <- pop_lm %>% broom::tidy() %>%
+  mutate(r2 = pop_lm %>% summary %>% .$adj.r.squared)
+
+ggplot(pop_1, aes(x = N_tlead, y = N_t)) +
+  ggtheme_plot() +
+  geom_point() +
+  geom_abline(intercept = pop_lm_df$estimate[1],
+              slope = pop_lm_df$estimate[2]) +
+  xlim(c(0, NA)) + ylim(c(0, NA)) +
+  labs(title = 'N_t vs N_{t-1}')
+ 
+ggplot(pop_1, aes(x = N_t, y = N_obs)) +
+  ggtheme_plot() +
+  geom_point() +
+  xlim(c(0, NA)) + ylim(c(0, NA)) +
+  labs(title = 'N vs N_obs')
+
+ggplot(pop_1, aes(x = t, y = N_t)) +
+  ggtheme_plot() +
+  geom_point() +
+  xlim(c(0, NA)) + ylim(c(0, NA)) +
+  labs(title = 'N_t vs time')
+
+```
+
+
