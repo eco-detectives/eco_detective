@@ -30,8 +30,7 @@ probKN <- function (N=50,p=0.2,k){
   p.vec[i+1] = ((N-k[i])/k[i])*((p)/(1-p))*p.vec[i]
   p.vec <- p.vec[1:50]
   }
-  plot(x=k, y=p.vec)
-  return(p.vec)
+  plot(x=k, y=p.vec, type="l")
   
 }
 probKN()
@@ -48,8 +47,7 @@ probKNPest <- function (N=10,p=0.1,k){
   p.vec <- p.vec[1:11]
   k <- k[1:11]
   }
-  plot(x=k, y=p.vec)
-  return(p.vec)
+  plot(x=k, y=p.vec, type="l")
 }
 probKNPest()
 probKNPest(p=0.2)
