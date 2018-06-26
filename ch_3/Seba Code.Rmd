@@ -28,7 +28,7 @@ probKN <- function (N=50,p=0.2,k){
   p.vec[1] <- Po
   for (i in k) {
   p.vec[i+1] = ((N-k[i])/k[i])*((p)/(1-p))*p.vec[i]
-  p.vec <- p.vec[1:50]
+  p.vec <- p.vec[1:N]
   }
   plot(x=k, y=p.vec, type="l")
   
@@ -62,21 +62,22 @@ cutoff <- 0.999
 Pot <- (2.71828)^(-r*t)
 Sum <- Pot
 
-MultiNomDist <- function(r=0.05,t=50, k){
-  k <- seq(1,t,by=1)
+MultiNomDist <- function(r=0.05,t=50, kmax){
+  k <- seq(1,kmax,by=1)
   p.vec <- vector(length=length(k), "numeric")
   p.vec[1] <- (2.71828)^(-r*t)
   for (i in k){
   p.vec[i+1] = ((r*t)/k[i+1])*(p.vec[i])
-  p.vec <- p.vec[1:t]
-  Sum[i] <- sum(p.vec[1:i+1])
-  #if(Sum[i] >= cutoff) {break}
+  Sum <- Sum + p.vec[i]
+  if(Sum >= cutoff) {break}
   
   #k <- k[1:4]
   }
-  plot(x=k, y=p.vec, type="l")
+  p.vec <- p.vec[1:kmax]
+  #plot(x=k, y=p.vec, type="l")
+  return(Sum)
 }
-MultiNomDist()
+MultiNomDist(kmax=200)
 
 #I couldn't set the conditions for the loop to start if Sum >= cutoff
 ```

@@ -48,11 +48,11 @@ p_k[1] = p_0_t
 i = 1
 
 while (sum < cutoff){
-  
   k = i
+  cat('i = ', i, ' k = ', k, ' sum = ', sum, '\n')
   p_k_t = ((r*t)/k)*p_k[i]
   p_k[i+1] = p_k_t 
-  sum =  p_k_t + p_k[i]
+  sum =  p_k_t + p_k[i+1]
   
   i= i+1
   
