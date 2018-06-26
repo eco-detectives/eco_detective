@@ -23,15 +23,28 @@ $p$ = 0.1
 $N$ = 7  
 
 #### Step 2
-Find $p(k,N)$ from equation 3.47
+Find $p(0,N)$ from equation 3.47
 $$p(0, N) = (1 - p)^N$$
 $$p(0,N) = (1-0.1)^7 = (0.9)^7 = 0.47$$
 
 #### Step 3 
-Find $p(k,N)$ from equation 3.48 (I will use dbinom... but I assume this is cheating?)
+Find $p(k,N)$ from equation 3.48  
+$$p(k.n)=\frac{N!}{(k!*(N-k!))}*p^k*(1-p)^{N-k}$$
+
+
+
 ```{r}
-k <- c(1:7) 
-k <- as.data.frame(k)
+# this doesn't work yet...
+k <- 1:7
+for (i in k) {
+  x = factorial(7)/(factorial(k)*factorial(7-k))*0.1^7*(1-0.1)^(7-k)
+  print(x)
+  }
+```
+
+```{r}
+# cheating version
+k <- 1:7
 
 results <- as.data.frame(apply(k, 2, dbinom, size=7, prob=0.1)) %>% select(p=k) %>% cbind(k) %>% select(k,p)
 ```
