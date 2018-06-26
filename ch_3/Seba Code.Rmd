@@ -5,18 +5,18 @@ date: "6/25/2018"
 output: html_document
 ---
 #PSEUDOCODE 3.1
-#Step 1
+##Step 1
 ```{r Pseudocode 3.1 Step 1}
 p <- 0.2
 N <- 50
 ```
-#Step 2
+##Step 2
 
 ```{r Pseudocode 3.1 Step 2}
 Po <- (1-p)^N
 ```
 
-#Step 3
+##Step 3
 ```{r Pseudocode 3.1 Step 3}
 probKN <- function (N,p,k){
   p=0.2
@@ -26,7 +26,7 @@ probKN <- function (N,p,k){
   p.vec[1] <- ((N-1+1)/1)*((p)/(1-p))*Po
 
   for (i in k) {
-  p.vec[i+1] = ((N-i+1)/k)*((p)/(1-p))*p.vec[i]
+  p.vec[i+1] = ((N-k[i])/k[i])*((p)/(1-p))*p.vec[i]
   
   }
   return(p.vec)
