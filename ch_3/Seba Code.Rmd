@@ -6,16 +6,6 @@ output: html_document
 ---
 #PSEUDOCODE 3.1
 
-#Step 1
-```{r Pseudocode 3.1 Step 1}
-p <- 0.2
-N <- 100 
-```
-
-#Step 2
-```{r Pseudocode 3.1 Step 2}
-ProbDist <- ((1-p)^N)
-```
 
 #Step 3
 ```{r Pseudocode 3.1 Step 3}
