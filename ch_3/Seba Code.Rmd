@@ -98,6 +98,7 @@ while (Sum < U){
   p_k_n[i] <- choose(N,k[i])*((p)^k[i])*((1-p)^(N-k[i]))
   Sum <- Sum + p_k_n[i]
 }
-plot(x=k, y=p_k_n)
+plot(x=k, y=p_k_n, ylab="p(K,N)")
+plot(x=k, y=cumsum(p_k_n), ylab= "cummulative p(K,N)" )
 U
 ```
