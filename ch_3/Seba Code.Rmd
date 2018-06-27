@@ -54,30 +54,50 @@ probKNPest(p=0.2)
 probKNPest(p=0.3)
 ```
 
-#Pseudocode 3.2
-```{r Pseudocode 3.2}
+
+#PSEUDOCODE 3.2 
+```{r Pseudocode 3.2 with while loop}
 r <- 0.05
 t <- 50
 cutoff <- 0.999
 Pot <- (2.71828)^(-r*t)
 Sum <- Pot
+p_k_t <- NA
+p_k_t[1] <- Pot
+i <- 1
+k <- NA
+k[1] <- 0
 
-MultiNomDist <- function(r=0.05,t=50, kmax){
-  k <- seq(1,kmax,by=1)
-  p.vec <- vector(length=length(k), "numeric")
-  p.vec[1] <- (2.71828)^(-r*t)
-  for (i in k){
-  p.vec[i+1] = ((r*t)/k[i+1])*(p.vec[i])
-  Sum <- Sum + p.vec[i]
-  if(Sum >= cutoff) {break}
-  
-  #k <- k[1:4]
-  }
-  p.vec <- p.vec[1:kmax]
-  #plot(x=k, y=p.vec, type="l")
-  return(Sum)
+while(Sum < cutoff){
+  i <- i + 1 #make the loop iterate over i
+  k[i] <- k[i-1] + 1 #set k[i] for the next loop
+  #cat('i = ', i, ' k = ', k, ' Sum = ', Sum, 'p=', p_k_t, '\n')
+  p_k_t[i] <- ((r*t)/k[i])*(p_k_t[i-1])
+  Sum = Sum + p_k_t[i]
 }
-MultiNomDist(kmax=200)
+plot(x=k, y=p_k_t)
+```
 
-#I couldn't set the conditions for the loop to start if Sum >= cutoff
+#PSEUDOCODE 3.3
+```{r PSEUDOCODE 3.3}
+set.seed(1)
+N <- 100
+p <- 0.2
+U <- runif(n=1, min=0, max=1)
+p_k_n <- NA
+k <- NA
+k[1] <- 1
+Sum <- 0
+i <- 1
+p_k_n[1] <- choose(N,k)*((p)^k[i])*((1-p)^(N-k[i]))
+
+while (Sum < U){
+  i <- i + 1
+  k[i] <- k[i-1] + 1
+  #cat('i = ', i, ' k = ', k,'p=', p_k_n,' Sum = ', Sum, 'U=', U, '\n')
+  p_k_n[i] <- choose(N,k[i])*((p)^k[i])*((1-p)^(N-k[i]))
+  Sum <- Sum + p_k_n[i]
+}
+plot(x=k, y=p_k_n)
+U
 ```
