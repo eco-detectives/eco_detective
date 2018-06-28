@@ -3,7 +3,7 @@ title: "Ch. 3 workbook - jcouture"
 output: html_notebook
 ---
 
-```{r setup}
+```{r setup,echo=F,message=FALSE,warning=FALSE}
 library(tidyverse)
 ```
 
@@ -60,6 +60,10 @@ binom0.3
 
 ```
 
+** this uses the reiterative method, but you can also use the below equation to "vectorize" (apply to a whole vector at once, using mutate for example)
+
+$$p(k, N) &= \binom{N}{k} p^k (1 - p)^{N - k}$$
+
 
 ### The Multinomial Distributuion
 
@@ -87,38 +91,38 @@ multinom<-function(p,N=10){
 
 ### The Poisson Distributuion
 
-*"The binomial distribution id one for which the random variable takes discrete values in desrete eperiments of trials. In the same way, the Poisson distribution (or Poisson process to indicate that something is happening over time) is one for which the random variable takes discrete values during __continuous__ sampling*
+*"The binomial distribution is one for which the random variable takes discrete values in desrete eperiments of trials. In the same way, the Poisson distribution (or Poisson process to indicate that something is happening over time) is one for which the random variable takes discrete values during __continuous__ sampling*
 
 **Pseudocode 3.2:** Ecological sampling for pests
 
 $$p(k,t)=\frac{e^{-rt}(rt)^{k}}{k!}=\left(\frac{rt}{k}\right)p(k-1,t)$$
 
 ```{r poisson}
-
-kvP<-c(seq(1,5,by=0.1))
   
-poiss<-function(r,t,cut){
+poiss<-function(r,t,cut,kMax){
+  kvP<-c(seq(1,kMax,by=1))
+  
   p0t<-exp(-r*t)
   sum=p0t
   
-  pkt<-vector(length = length(kVec))
+  pkt<-vector(length = length(kvP))
   
   for(i in 1:length(kvP)){
     pkt[i]<-(r*t/kvP[i])*ifelse(i<2,p0t,pkt[i-1])
     sum<-sum+pkt[i]
     
-    if (sum>cut) break
+    if (sum>=cut) break # while(sum<cut) <- keep doing this until this is no longer true
   }
   
   pVec<-c(p0t,pkt)
   #return(pVec)
   
   pDPlot<-plot(c(0,kvP),pVec,main = paste("Poisson\nr = ",r,", t =",t),xlab="k",ylab="sum(p(k,t))")
-  
+  #print(pkt)
   return(pDPlot)
 }
 
-  poiss(0.5,3,10)
+  poiss(0.05,300,1,100)
 
 
 ```
@@ -160,9 +164,9 @@ np<-normPlt(0.5,0,10)
 ```{r binomRand}
  
 binRand<-function(N,p){
-  U<-runif(n = 1,min = 0,max = N)
+  U<-runif(n = 1,min = 0,max = 1)
   k=0
-  suMv=rep(0,N+2)
+  suMv=rep(0,N+1)
   RkVec<-seq(1,N,by=1)
   RpkN<-numeric(length=length(RkVec))
   p0N=(1-p)^N
@@ -177,12 +181,12 @@ binRand<-function(N,p){
 
 #return(suMv)
 
-  kV=c(0:11)
-  biRPlt<-plot(x=kV,y=suMv,main=paste("binomial\nN =",N,"p =",p,"U=",round(U,3)),xlab="k",ylab="cumulative prob")
+
+  biRPlt<-plot(x=c(0,RkVec),y=suMv,main=paste("binomial\nN =",N,"p =",p,"U=",round(U,3)),xlab="k",ylab="cumulative prob")
 return(biRPlt)
 }
 
-binRand(10,0.1)
+binRand(100,0.1)
 ```
 
 
