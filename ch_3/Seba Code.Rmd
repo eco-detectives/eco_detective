@@ -7,6 +7,8 @@ output: html_document
 #Packages
 ```{r packages}
 library(dplyr)
+library(ggplot2)
+library(reshape2)
 ```
 #PSEUDOCODE 3.1
 ##Step 1
@@ -28,7 +30,7 @@ probKN <- function (N=50,p=0.2,k){
   p.vec[1] <- Po
   for (i in k) {
   p.vec[i+1] = ((N-k[i])/k[i])*((p)/(1-p))*p.vec[i]
-  p.vec <- p.vec[1:50]
+  p.vec <- p.vec[1:N]
   }
   plot(x=k, y=p.vec, type="l")
   
@@ -54,29 +56,80 @@ probKNPest(p=0.2)
 probKNPest(p=0.3)
 ```
 
-#Pseudocode 3.2
-```{r Pseudocode 3.2}
+
+#PSEUDOCODE 3.2 
+```{r Pseudocode 3.2 with while loop}
 r <- 0.05
 t <- 50
 cutoff <- 0.999
 Pot <- (2.71828)^(-r*t)
 Sum <- Pot
+p_k_t <- NA
+p_k_t[1] <- Pot
+i <- 1
+k <- NA
+k[1] <- 0
 
-MultiNomDist <- function(r=0.05,t=50, k){
-  k <- seq(1,t,by=1)
-  p.vec <- vector(length=length(k), "numeric")
-  p.vec[1] <- (2.71828)^(-r*t)
-  for (i in k){
-  p.vec[i+1] = ((r*t)/k[i+1])*(p.vec[i])
-  p.vec <- p.vec[1:t]
-  Sum[i] <- sum(p.vec[1:i+1])
-  #if(Sum[i] >= cutoff) {break}
-  
-  #k <- k[1:4]
-  }
-  plot(x=k, y=p.vec, type="l")
+while(Sum < cutoff){
+  i <- i + 1 #make the loop iterate over i
+  k[i] <- k[i-1] + 1 #set k[i] for the next loop
+  #cat('i = ', i, ' k = ', k, ' Sum = ', Sum, 'p=', p_k_t, '\n')
+  p_k_t[i] <- ((r*t)/k[i])*(p_k_t[i-1])
+  Sum = Sum + p_k_t[i]
 }
-MultiNomDist()
+plot(x=k, y=p_k_t)
+```
 
-#I couldn't set the conditions for the loop to start if Sum >= cutoff
+#PSEUDOCODE 3.3
+```{r PSEUDOCODE 3.3}
+set.seed(1)
+N <- 100
+p <- 0.2
+U <- runif(n=1, min=0, max=1)
+p_k_n <- NA
+k <- NA
+k[1] <- 1
+Sum <- 0
+i <- 1
+p_k_n[1] <- choose(N,k)*((p)^k[i])*((1-p)^(N-k[i]))
+
+while (Sum < U){
+  i <- i + 1
+  k[i] <- k[i-1] + 1
+  #cat('i = ', i, ' k = ', k,'p=', p_k_n,' Sum = ', Sum, 'U=', U, '\n')
+  p_k_n[i] <- choose(N,k[i])*((p)^k[i])*((1-p)^(N-k[i]))
+  Sum <- Sum + p_k_n[i]
+}
+plot(x=k, y=p_k_n, ylab="p(K,N)")
+plot(x=k, y=cumsum(p_k_n), ylab= "cummulative p(K,N)" )
+U
+```
+
+#PSEUDOCODE 3.4
+```{r PSEUDOCODE 3.4}
+s <- 0.9
+b <- 2
+sigN <- 0.95
+sigW <- 1.05
+sigV <- 1.12
+N <- NA
+NObs <- NA
+N[1] <- 100
+NObs[1] <- 100
+t <- seq(1, 50, by=1)
+
+for (i in t) {
+  #cat('N = ', N, ' NObs = ', NObs,'i=', i)
+  N[i+1] <- s*N[i] + b + rnorm(n=1, mean = 0, sd= sigW)
+  NObs[i+1] <- N[i] + rnorm(n=1, mean=0, sd=sigV) 
+}
+
+ObsVsPred <- data.frame(t, N[1:50], NObs[1:50])
+colnames(ObsVsPred) <- c("t", "N", "NObs")
+ObsVsPred <-melt(ObsVsPred, id=c("t"))
+
+
+ggplot(ObsVsPred, aes(x=t, y=value, color=variable))+
+  geom_point()
+
 ```
