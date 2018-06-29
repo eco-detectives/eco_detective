@@ -9,64 +9,190 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Binomial probability distirbution 
+## 3.1 Binomial probability distirbution 
 
-```{r binomial probability distribution}
+For situations when there are only two possible outcomes over $N$ trials and $Z$ meassures the number of times a specified outcome occurs and $p$ is the probability that the specified outcome occurs. 
 
-p= 0.1
-N= 100
+$$Pr\{Z = k\} = p(k,N) = \Bigg[\frac{N-k+1}{k}\Bigg] \Bigg [\frac{p}{1-p}\Bigg] p(k-1,N)$$
 
-p_0_N = (1 - p)^N
+```{r pseudocode3.1- Binomial probability distribution}
 
-store = rep(NA, N+1)
-store[1]= p_0_N
+binom <- function (p,N) {
+
+# calculates probability of zero successes
+p0 = (1 - p)^N
+# geneerates a vector to store the prob of k successes
+pk = rep(NA, N+1)
+pk[1]= p0
 
 
 for (k in 1:N){
   
-  p_k_N = ((N-k+1)/k)*(p/(1-p))*store[k]
-  store[k+1] = p_k_N
+  # calculates prob of k successes
+  pkN = ((N-k+1)/k)*(p/(1-p))*pk[k]
+  # stores prob of k successes
+  pk[k+1] = pkN
   
+   }
+
+# plots k vs prob of k successes
+plot(seq(0:N), pk, xlab="k", ylab="p(k,N)")
+
 }
 
-plot(seq(0:N), store, xlab="k", ylab="p(k)")
+binom(0.3, 100)
 ```
 
-## The poisson distribution
+### An ecological scenario: sampling for pests
 
-```{r poisson probability distribution}
+The chance that a fruit is infested is $p$. We sample $N$ fruits and test whether they are infested or not. The probability that $k$ of them are infested is given by the binomial distribution. 
+What is the distirbution of infested fruits if we sample 10 fruits and $p = 0.1, 0.2 or 0.3$?
 
-r= 0.02
-t= 100
-cutoff = 0.999
-p_k = NA
+```{r examples binomial, echo = FALSE}
 
-p_0_t = exp(-r*t)
-sum= p_0_t
-p_k[1] = p_0_t
+p.0.1 <- binom(.1, 10)
+p.0.2 <- binom(.2, 10)
+p.0.3 <- binom(.3, 10)
+
+```
+
+## 3.2 The poisson distribution
+
+The random variable takes discrete values during continuous sampling.
+
+$$Pr\{Z(t) = k\} =  p(k,t)= \Bigg(\frac{rt}{k}\Bigg) p(k-1,t)$$
+
+```{r pseudocode3.2- Poisson probability distribution}
+
+poisson.dist <- function (r,t,cutoff) {
+
+# calculate prob of zero successes
+p0 = exp(-r*t)
+# sets variable sum to stop the iteration
+sum= p0
+# starts the vector to sabe probabilities, iniciates with prob of zero
+pk= NA
+pk[1] = p0
 
 i = 1
 
 while (sum < cutoff){
   
   k = i
-  p_k_t = ((r*t)/k)*p_k[i]
-  p_k[i+1] = p_k_t 
-  sum =  p_k_t + p_k[i]
+  pkt = ((r*t)/k)*pk[i]
+  pk[i+1] = pkt 
+  sum =  sum + pkt 
+  #prints iteration values
+  cat( 'i =', i, 'k= ', k, 'pkt = ', pkt, 'sum = ', sum)
   
   i= i+1
   
 }
 
-plot(k, p_k, xlab="k", ylab="p(k)")
+plot(seq(0:(length(pk)-1)), pk, xlab="k", ylab="p(k,t)")
+
+}
+
+poisson.dist(r= 0.1, t=40, cutoff=0.999)
 ```
 
-## Montecarlo
+## 3.3 The Montecarlo method
 
-```{r Montecarlo}
+One way to increase our confidence in the methods we use is to test models and methods on sets of data in which we know exactly what is happening (i.e. we know the generation mechanism behind). The Montecarlo method is a useful method to generate such data by using random-number generators.
 
-N = 100
-p = 0.2
+### Generating an individual random variables from a binomial distirbution
 
-p_k_N = ((N-k+1)/k)*(p/(1-p))*store[k]
+```{r pseudocode 3.3 - random variable from a binomial distribution}
+
+ran.binom <- function (N,p) {
+
+# chooses a random number from a uniform distirbution
+U = runif(1)
+# sets variable sum to stop the iteration
+sum= 0
+# set initial k 
+k = 0
+# stores probabilities to get p(k-1)
+p0 = (1 - p)^N
+pk = p0
+
+i = 1
+
+while (sum < U){
+  
+  k= k+1
+  # calculates prob of k successes
+  pkN = ((N-k+1)/k)*(p/(1-p))*pk[i]
+  pk[i+1] = pkN
+  
+  sum =  sum + pkN
+   
+  #prints iteration values
+  cat( 'i =', i, 'k= ', k, 'pkN = ', pkN, 'sum = ', sum)
+  
+  i= i+1
+  
+}
+
+}
+
+ran.binom(40, 0.2)
+```
+
+### An Ecological Scenario : The simple population model with process and observation uncertainty 
+
+This excersise illustrates how we can generate data based on a basic population model introducing process and observation uncertainty.
+
+Population dynamics are given by:
+
+$$N_{t+1} = s N_t + b + W_t$$ 
+
+Abundance observations are given by:
+
+$$N_{obs,t} = N_t + V_t$$
+
+Where $s$ is the survival probability, $b$ is the number of new individuals (i.e. births), $W_t$ is a random distribution that introduces process uncertainty by affecting the birth rate in each time period, and $V_t$ is another random variable that introduces observation uncertainty by affecting the observed abundance.  
+
+```{r pseudocode 3.4 - Montecarlo example}
+
+pop.dynamics.obsv <- function( t, s, b, sigma.N, sigma.W, sigma.V, N.0){
+  
+  # sets first period abundance equal to N0
+  N.t = N.0 + rnorm(n= 1, mean= 0, sd= sigma.N)
+  N.obs = N.0 + rnorm(1, 0, sigma.V)
+  
+  
+for (i in 1:t){
+  
+  N.t[i+1] = s*N.t[i]+ b + rnorm(1, 0, sigma.W)
+  N.obs[i+1] =  N.t[i+1] + rnorm(1, 0, sigma.V)
+  
+}
+  
+  lag.plot(N.obs, lags=1, labels = FALSE, do.lines= FALSE)
+
+}
+```
+
+
+#### How process uncertainty affects the relationship between $N_t$ and $N_{t-1}$?
+
+To introduce process uncertainty we introduce a random variable drawn from a normal distribution with mean = 0 and sd= $\sigma_w$. In this case $\sigma_w = 10$
+
+```{r with process uncertainty, echo= FALSE}
+
+pop.dynamics.obsv(t= 50, s= 0.8, b = 20, sigma.N=0, sigma.W=10, sigma.V=0, N.0=50)
+
+
+```
+
+#### Adding observational uncertainty
+
+To introduce observational uncertainty we introduce a random variable drawn from a normal distribution with mean = 0 and sd= $\sigma_v$. In this case $\sigma_v = 10$. Now the relationship between the observed abundance in time $t$ with the observed abundance in time $t-1$ is less clear. 
+
+```{r with process and observational uncertainty, echo= FALSE}
+
+pop.dynamics.obsv(t= 50, s= 0.8, b = 20, sigma.N=0, sigma.W=10, sigma.V=10, N.0=50)
+
+
 ```
