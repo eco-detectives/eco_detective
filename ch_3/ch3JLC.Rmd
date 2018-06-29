@@ -35,12 +35,12 @@ binom<-function(p,N=10){
   pkN0<-c(p0N,pkN)
   print(pkN0)
   
-  plot(c(0,kVec),binom0.1,main = paste("p = ",p,"N = 10"),xlab="k",ylab="p(k,N)")
+  plot(c(0,kVec),pkN0,main = paste("p = ",p,"N = 10"),xlab="k",ylab="p(k,N)")
 }
 
 binom0.1<-binom(0.1)
 
-binom0.1
+#binom0.1
 
 ```
 
@@ -48,7 +48,7 @@ binom0.1
 
 binom0.2<-binom(0.2)
 
-binom0.2
+#binom0.2
 
 ```
 
@@ -56,13 +56,13 @@ binom0.2
 ```{r pests0.3}
 
 binom0.3<-binom(0.3)
-binom0.3
+#binom0.3
 
 ```
 
-** this uses the reiterative method, but you can also use the below equation to "vectorize" (apply to a whole vector at once, using mutate for example)
+** this uses the iterative method, but you can also use the below equation to "vectorize" (apply to a whole vector at once, using mutate for example)
 
-$$p(k, N) &= \binom{N}{k} p^k (1 - p)^{N - k}$$
+$$p(k, N) = \binom{N}{k} p^k (1 - p)^{N - k}$$
 
 
 ### The Multinomial Distributuion
@@ -87,7 +87,7 @@ multinom<-function(p,N=10){
 
 ```
 
-###### ???
+###### Run as above for each $k_{n}$ separately?
 
 ### The Poisson Distributuion
 
@@ -126,6 +126,28 @@ poiss<-function(r,t,cut,kMax){
 
 
 ```
+
+### Poisson (non-iterative)
+
+Set $p(0,t)$ and new opbject $sum=p(0,t)$ using:
+$$p(0,t)=e^{-rt}$$
+
+
+$$p(k,t)=\frac{e^{-rt}(rt)^{k}}{k!}$$
+```{r possNI}
+
+poisNI<-function(r,t,cut){
+  
+  pk0<-exp(-r*t)
+  
+  df<-data.frame(k=c(0:100),
+                 pkt=c(pk0,NA),
+                 rVal=c())
+  df2<-df %>%
+    mutate()
+}
+```
+
 
 ### The Gausian (normal) Distributuion
 
@@ -189,7 +211,51 @@ return(biRPlt)
 binRand(100,0.1)
 ```
 
+##### Non-iterative method:
+
+```{r binomRand-NI}
+
+qbinom1 <- function(N, k, p, U) {
+  qbinom1_df <- data.frame(N = N,
+                          k = rep(0:N, times = length(p_vec)),
+                          p = rep(p_vec, each = N + 1)) %>%
+    group_by(p) %>%
+    mutate(pdf = choose(N, k) * p^k * (1 - p)^(N - k),
+           cdf = cumsum(pdf)) %>%
+    filter(cdf > U) %>%
+    summarize(U = U, N = first(N), k_successes = first(k))
+
+  return(qbinom1_df)
+}
+
+N <- 100
+p_vec <- c(0.01, 0.05, 0.10, 0.2, 0.5, 0.75)
+
+U <- runif(n = 50, min = 0, max = 1)
+
+qbinom_df <- lapply(U, FUN = function(x) {
+  qbinom1(N, k, p_vec, x)
+}) %>%
+  bind_rows()
+
+ggplot(qbinom_df, aes(y = U, x = k_successes, color = p)) +
+  geom_point()
+
+```
 
 
+### Monte Carlo Technique
 
+Adding process ($W_{t}$) and observation ($V_{t}$) error to a data model. This excersize tries to demonstrate the importance of understading the different types of error. 
 
+##### Process error
+$$N_{t+1}=sN_{t}+b_{t}+W_{t}$$
+##### Observational error
+$$N_{obs,t}=N_{t}+V_{t}$$
+```{r}
+
+mcPop<-function(s,b,sigN,sigW,sigV,N0){
+  
+}
+
+```
