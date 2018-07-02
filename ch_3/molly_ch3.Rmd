@@ -1,5 +1,5 @@
 ---
-title: "Chap. 3"
+title: "Chapter 3"
 author: "Molly Wilson"
 date: "6/22/2018"
 output:
