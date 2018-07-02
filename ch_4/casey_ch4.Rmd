@@ -1,0 +1,322 @@
+---
+title: 'Eco-Detectives: chapter 4'
+author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float: yes
+    number_sections: true
+    theme: cerulean
+    highlight: haddock
+    includes: 
+      in_header: '~/github/src/templates/ohara_hdr.html'
+  pdf_document:
+    toc: true
+---
+
+``` {r setup, echo = TRUE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
+
+source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
+
+```
+
+$\newcommand{\E}{\mathbb{E}}\newcommand{\Var}{\mathrm{Var}}$
+
+# Chapter 4: Incidental catch in fisheries
+
+## Pseudocode 4.1
+
+Here we'll try a Monte Carlo method to estimate the chance of obtaining meaningful statistical data for incidental catch, for various levels of observer coverage in a fishery.  Why use negative binomial?  It sounds like it has to do with dispersion... the mean value is not a likely occurrence; variance is significantly higher than the mean (in  Poisson, mean and variance are the same value).  
+
+In Mangel/Hilborn, the "$m, k$" version for the probability that the bycatch on the $i^{th}$ tow, $C_i$, equals a particular value $c$:
+
+$$\Pr(C_i = c) = p(c) = \frac{\Gamma(k + c)}{\Gamma(k)c!} \left(\frac{k}{k+m}\right)^k \left(\frac{m}{m + k}\right)^c$$
+where $m$ is the mean and $k$ is the overdispersion parameter:  $\E[C_i] = m; \Var(C_i) = m + \frac{m^2}{k}$.
+
+From page 78, the gamma function is related to factorials, and is calculated from
+$$\Gamma(n) = \int_0^{\infty} e^{-t}t^{n-1}dt = \frac{1}{\sum_{k=1}^{\infty} c_k n^k}$$
+and for integers, $$\Gamma(n) = (n-1)!$$
+
+Also in the book, they provide an alternate formulation for negative binomial which matches Casella/Berger: regular binomial counts the number of successes in a fixed number of Bernoulli trials; negative binomial counts the number of Bernoulli trials needed to get a fixed number of successes.  C/B use a formulation of
+
+$$\Pr(X = x | r, p) = \binom{x - 1}{r - 1} p^r (1 - p)^{x - r}$$
+where $x$ = number of trials at which the $r^{th}$ success occurs, where $r$ is a fixed integer.  Poisson is in the negative binomial family as a limiting case, where $r \rightarrow \infty$ and $p\rightarrow 1$.
+
+See the text for how to resolve the two formulations.
+
+### Specify params
+
+Specify level of observer coverage, $N_{tow}$ per sim, and total number of sims $N_{sim}$, and neg binom params $m, k$.  Also specify criterion success $d$ and value of $t_q$.
+
+For $m, k$: From above we know $\E[C_i] = m; \Var(C_i) = m + \frac{m^2}{k} \Longrightarrow k = \frac{m^2}{\Var(C_i) - m}$.  Read in the data and calculate these from `mean` and `var`.  Because of the construction of table 3, we will calculate mean and variance using the number of tows as weighting factors.
+$$\E[N_{birds}] = \frac{\sum_{i}(N_{tows_i} N_{birds_i})} {\sum_i N_{tows_i}}$$
+$$\Var(x) = \frac{1}{\sum_i N_{tows_i} - 1} \sum_i \left(N_{tows_i}(N_{birds_i} - \E[N_{birds}])^2\right)$$
+
+``` {r pseudocode 4_1_1}
+
+inc_catch_df <- readxl::read_excel('~/github/eco_detective/ch_4/data/table_4_3.xlsx',
+                                   skip = 2)
+### these column names are useless... change 'em to something easy to use:
+names(inc_catch_df) <- c('n_caught', 'n_tows')
+
+### mean here is a weighted mean: number of albatrosses weighted by number of tows.
+### sample variance is calculated as a weighted sample variance.
+inc_catch_sum <- inc_catch_df %>%
+  summarize(m = sum(n_caught * n_tows) / sum(n_tows),
+            v = sum(n_tows * (n_caught - m)^2) / (sum(n_tows) - 1))
+
+m_data <- inc_catch_sum$m
+k_data <- m_data^2 / (inc_catch_sum$v - m_data)
+n_tows <- 3000
+n_sims <- 200
+d_lim  <- .25
+t_q    <- 1.645
+```
+
+### Iterate over tows and simulations
+
+* First let's set up the probability of $n$ birds in by-catch for any given tow (using equation 4.7).  From this set up a CDF we can use with a uniform random distribution like we did in chapter 3 Monte Carlo.
+    * There may be a negative binomial function built in to R, but let's do it manually for now.
+        
+``` {r pseudocode 4_1_2a}
+
+pr_c <- function(c, m = m_data, k = k_data) { # c <- 0
+  ### function to calculate equation 4.7.
+  ### NOTE: pr_c() can take a vector of c values and return a vector of probs
+  term1 <- gamma(k + c) / (gamma(k) * factorial(c))
+  term2 <- (k / (k + m))^k
+  term3 <- (m / (m + k))^c
+  
+  p <- term1 * term2 * term3
+  return(p)
+}
+
+birds_per_tow_df <- data.frame(n_birds = 0:40,
+                               pr_n    = pr_c(0:40)) %>%
+  mutate(cdf_n = cumsum(pr_n),
+         cdf_floor = lag(cdf_n, default = 0))
+### note the cdf_floor is the probability that count = n - 1.
+### So: the range (cdf_floor, cdf_n) brackets the range of probabilities for each n.
+### NOTE: the CDF doesn't go all the way to 1, so can run into an error
+### if a random draw exceeds the range.
+
+```
+
+* For each simulation:
+    * for each tow:
+        * pick a random number from uniform dist
+        * apply to CDF to pick a number of birds in that tow.
+
+``` {r pseudocode 4_1_2b}
+
+### let's set up a timer so we can compare speeds with a vectorized version later!
+ptm <- proc.time()
+
+### first let's set up a matrix, with rows = simulations and columns = number
+### of tows, filled with NAs
+bycatch_mat <- matrix(data = NA, nrow = n_sims, ncol = n_tows)
+
+
+for(sim in 1:n_sims) { # sim <- 1
+  
+  ### let's add in a print out so we can tell where we are, every 100 sims.
+  if(sim %% 100 == 0) { ### i.e. sim is evenly divisible by 100
+    message(sim, '... ')  ### without the \n, it will keep writing on the same line
+  }
+  
+  for(tow in 1:n_tows) { # tow <- 1
+    
+    ### draw the uniform random:
+    draw <- runif(n = 1, min = 0, max = 1)
+    ### NOTE: this is pretty clunky...
+    ### compare to the CDF column; we want the observation where our draw
+    ### falls within the CDF range.   So if the probability of
+    ### say 3 birds or fewer birds is 0.9762582, and the prob of 4 or fewer
+    ### birds is 0.9831761, and we draw .980, then we want to match 4 birds.
+    ### So chopping up the logic:
+    in_cdf  <- which(draw > birds_per_tow_df$cdf_floor & draw < birds_per_tow_df$cdf_n)
+      ### what is the index of the row that falls within the CDF?
+    n_birds <- birds_per_tow_df$n_birds[in_cdf]
+    
+    if(length(n_birds) == 0) {
+      ### error check: in case our draw exceeded the ranges in the dataframe...
+      n_birds = max(birds_per_tow_df$n_birds + 1)
+    }
+
+    # cat(sprintf('draw = %f, n_birds = %s\n', draw, n_birds))
+    bycatch_mat[sim, tow] <- n_birds
+  }
+}
+
+t_elapsed <- proc.time() - ptm
+cat('time: ', t_elapsed[3], 'seconds')
+```
+
+``` {r random birds function}
+### let's set up a function to return a number of birds for a given draw
+in_cdf_fxn <- function(x, df) {
+  y <- which(x > df$cdf_floor & x < df$cdf_n)
+}
+
+random_birds <- function(draw, df = birds_per_tow_df) {
+  ### If draw is outside the bounds
+  ### for the cdf values in the dataframe, just set it to the last value
+  ### (i.e. if 40 is the max n, then anything higher than 40 gets set to 40)
+  
+  if(length(draw) > 1) {
+    ### If draw is longer than 1 element, use sapply so draw can be a vector.  
+    in_cdf  <- sapply(draw, FUN = function(x) {
+      y <- in_cdf_fxn(x, df)
+      if (length(y) == 0) y <- nrow(df)
+      return(y)
+    })
+  } else {
+      in_cdf <- in_cdf_fxn(draw, df)
+      if (length(in_cdf) == 0) {
+        in_cdf <- nrow(df)
+      }
+  }
+
+  n_birds <- df$n_birds[in_cdf]
+    ### this can take a vector and return a vector; error checking has to
+    ### be done first.
+
+  return(n_birds)
+}
+```
+
+``` {r pseudocode 4_1_2b with cdf compare function, eval = FALSE}
+### let's set up a timer so we can compare speeds with a vectorized version later!
+ptm <- proc.time()
+
+### first let's set up a matrix, with rows = simulations and columns = number
+### of tows, filled with NAs
+bycatch_mat <- matrix(data = NA, nrow = n_sims, ncol = n_tows)
+
+for(sim in 1:n_sims) { # sim <- 1
+  
+  ### let's add in a print out so we can tell where we are, every 100 sims.
+  if(sim %% 100 == 0) { ### i.e. sim is evenly divisible by 100
+    message(sim, '... ')  ### without the \n, it will keep writing on the same line
+  }
+  
+  for(tow in 1:n_tows) { # tow <- 1
+    
+    ### draw the uniform random:
+    draw <- runif(n = 1, min = 0, max = 1)
+    
+    bycatch_mat[sim, tow] <- random_birds(draw)
+  }
+}
+
+t_elapsed <- proc.time() - ptm
+cat('time: ', t_elapsed[3], 'seconds')
+
+### comparable to hard-coded version since it only uses the sapply in the function if draw is a vector.
+```
+
+``` {r pseudocode 4_1_2b with dataframes}
+### let's set up a timer so we can compare speeds with a vectorized version later!
+ptm <- proc.time()
+
+### Set up a dataframe, with rows and sims
+bycatch_df <- data.frame(sim = rep(1:n_sims, each = n_tows),
+                         tow = rep(1:n_tows, times = n_sims)) %>%
+  ### draw the uniform random and calculate number of birds
+  mutate(draw = runif(n = n(), min = 0, max = 1)) %>%
+  mutate(n_birds = random_birds(draw))
+
+t_elapsed <- proc.time() - ptm
+cat('time: ', t_elapsed[3], 'seconds')
+```
+
+Faster with vectorization.
+
+### Compute mean and variance for each simulation
+
+Use rowSums() and colSums() to work with matrices.  Since each row is a simulation, use rowSums to calc the sum of all observed bird bycatch in each tow, for mean.
+
+If we use `rowSums(x - y)` where `x` is the matrix and `y` is the row means, we should get each element in the row minus the row mean.  This doesn't work so well for `colSums()` since the vector of means gets applied vertically, not horizontally.  I think this can be changed in R but whatever...
+
+``` {r pseudocode 4_1_3 on matrix}
+
+system.time({
+  sim_means <- 1/n_tows * rowSums(bycatch_mat)
+  
+  sim_vars  <- 1/(n_tows - 1) * rowSums((bycatch_mat - sim_means)^2)
+})
+
+```
+
+``` {r pseudocode 4_1_3 on dataframe}
+system.time({
+sim_means_df <- bycatch_df %>%
+  group_by(sim) %>%
+  summarize(mean = 1/n_tows * sum(n_birds),
+            var  = 1/(n_tows - 1) * sum((n_birds - mean)^2))
+})
+
+```
+
+rowSums() is really fast!
+
+### Compute successes
+
+``` {r compute successes}
+
+
+success_df <- sim_means_df %>%
+  mutate(range = 2 * sqrt(var / n_tows) * t_q,
+         success = range < d_lim * mean)
+
+sum(success_df$success)
+  
+```
+
+## Combine into one big loop to try multiple values of n_tows
+
+``` {r pseudocode 4_1_all}
+### set up a vector of n_tows values:
+
+n_tows_vec <- seq(250, 5000, 250)
+success_vec <- rep(NA, length(n_tows_vec))
+
+for(i in seq_along(n_tows_vec)) {
+  
+  n_tows <- n_tows_vec[i]
+  ### Set up a dataframe, with rows and sims
+  bycatch_df <- data.frame(sim = rep(1:n_sims, each = n_tows),
+                           tow = rep(1:n_tows, times = n_sims)) %>%
+    ### draw the uniform random and calculate number of birds
+    mutate(draw = runif(n = n(), min = 0, max = 1)) %>%
+    mutate(n_birds = random_birds(draw))
+  
+  sim_means_df <- bycatch_df %>%
+    group_by(sim) %>%
+    summarize(mean = 1/n_tows * sum(n_birds),
+              var  = 1/(n_tows - 1) * sum((n_birds - mean)^2))
+  
+  success_df <- sim_means_df %>%
+    mutate(range = 2 * sqrt(var / n_tows) * t_q,
+           success = range < d_lim * mean)
+  
+  success_vec[i] <- sum(success_df$success) / n_sims
+}
+
+```
+
+``` {r plot it}
+success_df <- data.frame('n_tows'       = n_tows_vec, 
+                         'success_rate' = success_vec)
+
+ggplot(success_df, aes(x = n_tows, y = success_rate)) +
+  ggtheme_plot() +
+  geom_line()
+
+```
+
