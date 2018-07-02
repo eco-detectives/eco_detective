@@ -1,0 +1,62 @@
+---
+title: "Ecological Detective - Chapter 4"
+author: "Seba Tapia"
+date: "7/2/2018"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(vcdExtra)
+```
+
+#load dataframes
+```{r load dataframes}
+SummaryData <- read.csv("/Users/seba/github/eco_detective/ch_4/data/table_4_2.csv")
+colnames(SummaryData) <- c("Dates", "TowsObserved", "ByCatch", "Capture rate (birds/tow)")
+SummaryData <- SummaryData[-c(1,8),]
+SummaryData <- apply(SummaryData,2,as.numeric)
+SummaryData <- as.data.frame(SummaryData)
+
+FrequencyData <- read.csv("/Users/seba/github/eco_detective/ch_4/data/table_4_3.csv")
+ExpandedData <- expand.dft(FrequencyData, var.names="bycatch", freq="frequency")
+```
+
+#A Montecarlo approach for estimating chance of success in observer program
+# Pseudocode 4.2 Step 1
+```{r pseudocode 4.2 step 1}
+#First, got to calculate m and s'^2
+
+m <- (1 / sum(SummaryData$TowsObserved))*sum(SummaryData$ByCatch) #Equation 4.1
+SampleVar <- (1 / (nrow(ExpandedData)-1))*sum((ExpandedData$bycatch - m)^2) #Equation 4.2
+d <- ((sqrt(SampleVar))/(sqrt(nrow(ExpandedData))))*1.96  #eqaution 4.5 to find tolerable error of mean
+Ntow <- ((SampleVar)/(d^2))*(1.96^2)  #Equation 4.6 to find required level of observer coverage
+k <- (m^2)/(SampleVar-m)  #Equation 4.8 to find k (number of successes)
+tq <- 1.96 #t-value at 95% CI
+```
+
+##Step 2
+```{r Step 2}
+#First, set up the probability calculation for a given bycatch level on the ith tow
+PByCatch <- function(c, k=k, m=m){
+
+Term1 <- (gamma(k+c))/(gamma(k)*factorial(c))
+Term2 <- ((k)/(k+m))^k
+Term3 <-  ((m)/(m+k))^c
+p <- Term1 * Term2 * Term3
+return(p)
+}
+PByCatch(c=1,k=k, m=m) #The probability for a tow to have 1 bird as bycatch is 0.04
+PByCatch(c=0,k=k, m=m) #The probability for a tow to have 1 bird as bycatch is 0.91
+
+
+
+for (i in seq(0,12,by=1)){
+  Pc <- NA
+  Pc[i] <- PByCatch(c=i, k=k, m=m)
+  return(Pc)
+}
+  
+
+```
