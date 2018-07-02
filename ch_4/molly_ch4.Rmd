@@ -1,0 +1,25 @@
+---
+title: "Chapter 3"
+author: "Molly Wilson"
+date: "6/22/2018"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    number_sections: false
+---
+
+```{r, echo=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+
+data_bycatch <-read.csv('./ch_4/data/table_4_3.csv')
+```
+
+# Chapter 4: Incidental catch in fisheries - seabirds in the New Zealand squid trawl fishery
+
+In this chapter we are trying to determine the minimum number of onboard observers needed to give an accurate representation of bycatch data based on different amounts of process and observation uncertainty.
+
+## 4.1: A Monte Carlo approach for estimating the chance of success in an observer program
+
