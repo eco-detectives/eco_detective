@@ -12,62 +12,237 @@ output:
 
 ```{r, echo=FALSE, warning=FALSE}
 library(dplyr)
+library(ggplot2)
 ```
 
+# Chapter 3: Probability and Probability Models
 
 ## 3.1 Binomial distribution
 
-#### Step 1
-Specify $p$ and $N$  
+In this excercise we are plotting the probability distribution of getting $k$ successes out of $N$ attempts based on a given probability $p$ of getting a success on any given attempt.
+
+1. Specify $p$ and $N$  
 $p$ = 0.1  
 $N$ = 7  
 
-#### Step 2
-Find $p(0,N)$ from equation 3.47
+2. Find $p(0,N)$ from equation 3.47
 $$p(0, N) = (1 - p)^N$$
 $$p(0,N) = (1-0.1)^7 = (0.9)^7 = 0.47$$
 
-#### Step 3 
-Find $p(k,N)$ from equation 3.48  
+3. Find $p(k,N)$ from equation 3.48  
 $$p(k.n)=\frac{N!}{(k!*(N-k!))}*p^k*(1-p)^{N-k}$$
 
-
-
+For-loop method (with hints from Casey's code):
 ```{r}
-# this doesn't work yet...
-k <- 1:7
-for (i in k) {
-  x = factorial(7)/(factorial(k)*factorial(7-k))*0.1^7*(1-0.1)^(7-k)
-  print(x)
-  }
+p <- 0.1
+N <- 7
+
+k_vec <- 0:N # create vector of k values
+prob <- rep(NA, length(k_vec)) # create (currently empty) vector to store probability values
+
+for (i in seq_along(k_vec)) {
+  k <- k_vec[i]
+  prob[i] <- ifelse(k == 0,
+                    (1 - p)^N, # using equation 3.47 for when k=0
+                    (N - k + 1)/(k) * (p)/(1 - p) * prob[i-1]) # when k>1, p(k,N) is based of p(k-1,N) using equation 3.48
+}
+binomial_df <- data.frame(k = k_vec, p = prob)
+                      
+ggplot(binomial_df, aes(x = k, y = p)) +
+  geom_line() +
+  geom_point()
 ```
 
-```{r}
-# cheating version
-k <- 1:7
+Vectorized version (also help from Casey):
+``` {r ch 3 pseudocode 3-1 vectorized}
+N <- 7
+p_vals <- c(0.1, 0.25, 0.5, 0.75, .97)
 
-results <- as.data.frame(apply(k, 2, dbinom, size=7, prob=0.1)) %>% select(p=k) %>% cbind(k) %>% select(k,p)
+binomial_df2 <- data.frame(k = rep(0:N, times = length(p_vals)),
+                     p = rep(p_vals, each = N + 1)) %>%
+  mutate(prob = ifelse(k == 0,
+                      (1 - p)^N, 
+                      choose(N, k) * p^k * (1 - p)^(N - k))) # using equation 3.44 instead of 3.47 because we are not basing p(k,N) on p(k-1,N)
+                      
+ggplot(binomial_df2, aes(x = k, y = prob, color = p)) +
+  geom_line(aes(group = p)) +
+  geom_point()
+```
+
+Cheating version using dbinom
+```{r}
+k <- 1:7
+k <- as.data.frame(k)
+
+binomial_df3 <- as.data.frame(apply(k, 2, dbinom, size=7, prob=0.1)) %>% select(p=k) %>% cbind(k) %>% select(k,p)
+# still need to bind row with p(0,k)
+
+ggplot(binomial_df2, aes(x = k, y = p)) +
+  geom_line() +
+  geom_point()
 ```
 
 ## 3.2 Poisson distribution
 
-#### Step 1
-Choose $r$, $t$, and $cutoff$  
+In this excercise we are using the Poisson distribution, which is essentially the binomial distribution when the time period $t$ gets infinitely small, and using a rate value $r$ instead of $p$ that defines the rate of successes.
+
+1. Choose $r$, $t$, and $cutoff$  
 $r$ = 0.1  
-$t$ = 5  
+$t$ = 20  
 $cutoff$ = 0.999  
 
-#### Step 2
-Set: 
+2. Set: 
 $$p(0,t)=e^{-rt}$$
 $$SUM=p(0,t)$$
 
-#### Step 2
-Find $p(k,t)$ from equation 3.57
+3. Find $p(k,t)$ from equation 3.57
 $$p(k, t) = \frac{\lambda^k e^{-\lambda}}{k!} = \frac{(rt)^k e^{-rt}}{k!}$$
 
+While-loop version (adapted from Casey's code):
 ```{r}
+r <- .1
+t <- 20
+cutoff <- 0.9999
+k <- NA; prob = NA
+
+# set starting conditions for the first iteration:
+i <- 1
+k[1] <- 0
+prob[1]  <- exp(-r*t)
+sum_p <- prob[1]
+
+while(sum_p < cutoff) {
+  i <- i + 1 # increase i with each step
+  k[i] <- k[i-1] + 1 # increase k with each step
+  prob[i] <- r * t / k[i] * prob[i - 1] # equation 3.57
+  
+  sum_p <- sum_p + prob[i] # increase value of "sum_p" with each iteration to get cumulative probability value
+}
+
+poisson_df <- data.frame(k = k, prob = prob)
+
+ggplot(poisson_df, aes(x = k, y = prob)) + 
+  geom_point() +
+  geom_line()
+```
+
+Vectorized version (from Casey):
+```{r}
+r_vec <- c(0.01, 0.02, 0.05, .10, .25, .5)
+t <- 20
+cutoff <- 0.9999
+k_max <- 100
+
+poisson_df2 <- data.frame(k = rep(0:k_max, times = length(r_vec)), # creating repeating k values for each given r value
+                         r = rep(r_vec, each = k_max + 1)) %>% # don't understand each vs. times...?
+                  
+  mutate(prob = exp(-r * t) * (r * t)^k / factorial(k)) %>% # calculating p(k,t) without knowing p(k-1,t)
+  group_by(r) %>%
+  mutate(CDF = cumsum(prob)) %>%
+  ungroup() %>%
+  filter(CDF < cutoff)
+
+ggplot(poisson_df2, aes(x = k, y = prob, color = r)) + 
+  geom_point() +
+  geom_line(aes(group = r))
+```
+
+
+## 3.3 Monte Carlo: random variable from a binomial distribution
+
+The Monte Carlo method uses random number generators to construct data. In this excercise we're using a uniform distribution to select an integer result from a binomial distribution.
+
+1. Specify parameters $N$ and $p$, and choose uniformly distributed random number U
+
+$N$=15
+$p$=0.1
+$k$=0
+SUM=0
+
+2. Compute $p(k,N)$ from equation 3.44:
+
+$$p(k,N)=choose(N, k) * p^k * (1 - p)^(N - k)$$
+
+Dataframe/lapply method (adapted from Casey):
+```{r}
+N <- 15
+p_vec <- c(.1,.2,.5,.9)
+U<-runif(15)
+
+randbinom <- function(N, k, p, U) {
+  randbinom_df <- data.frame(N = N,
+                          k = rep(0:N, times = length(p_vec)),
+                          p = rep(p_vec, each = N + 1)) %>%
+    group_by(p) %>%
+    mutate(pdf = choose(N, k) * p^k * (1 - p)^(N - k),
+           cdf = cumsum(pdf)) %>%
+    filter(cdf > U) %>%
+    summarize(U = U, N = first(N), k_successes = first(k))
+
+  return(randbinom_df)
+}
+
+randbinom_df <- lapply(U, FUN = function(x) {
+  randbinom2(N, k, p_vec, x)
+}) %>%
+  bind_rows()
+
+ggplot(randbinom_df, aes(y = U, x = k_successes, color = p)) +
+  geom_point()
+```
+
+
+## 3.4 An ecological scenario: the simple population model with process and observation uncertainty
+
+$$N_{t+1} = sN_t + b_t + \sigma_w$$ 
+$$N_{obs,t} = N_t + \sigma_v$$ 
+
+1. Specify $s$,$b$,$\sigma_N$, $\sigma_w$,$\sigma_v$,and $N_0$
+$s$= survival = 0.8
+$b$= births = 20
+$N_0$= starting population = 50
+$\sigma_N$= 
+$\sigma_w$= process uncertainty = 10
+$\sigma_v$= observation uncertainty = 0
+
+2. Begin a loop over 50 time steps
+
+```{r}
+pop <- function (s,b,N0,sigma_N,sigma_w,sigma_v) {
+  t_vec <- 1:50
+  N_act <- rep(NA, 50)
+  N_obs <- rep(NA, 50)
+
+for(t in t_vec){
+  if(t==1){ # set actual and observed populations in initial time step to N0
+    N_act<-N0
+    N_obs<-N0
+  }
+  else{
+  N_act[t]<-s*N_act[t-1]+b+rnorm(1, 0, sigma_w)
+  N_obs[t]<-N_act[t]+rnorm(1, 0, sigma_v)
+  }
+}
+  N_df <- data.frame(t = t_vec,
+                     N_act = N_act,
+                     N_obs = N_obs)
+  return(N_df)
+}
 
 ```
 
-## 3.3
+Generating values with no observation uncertainty ($\sigma_v$=0)
+```{r}
+pop1<-pop(s= 0.8, b = 20, sigma_N=0, sigma_w=10, sigma_v=0, N0=50) %>% mutate(N_act_prev = lead(N_act), N_obs_prev=lead(N_obs)) # create values for N_act and N_obs in previous time step for graphing purposes
+
+ggplot(pop1, aes(y = N_act, x = N_act_prev)) + geom_smooth(method=lm) + geom_point()
+```
+
+Generating values with observation uncertainty ($\sigma_v$=10)
+```{r}
+pop2<-pop(s= 0.8, b = 20, sigma_N=0, sigma_w=10, sigma_v=10, N0=50) %>% mutate(N_act_prev = lead(N_act), N_obs_prev=lead(N_obs))
+
+ggplot(pop2, aes(y = N_obs, x = N_obs_prev)) + geom_smooth(method=lm) + geom_point()
+```
+
+
