@@ -1,4 +1,4 @@
----
+   ---
 title: 'Eco Detectives: Ch4 work'
 author: "Jessica Couture"
 date: "July 2, 2018"
@@ -7,5 +7,65 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
 ```
 
+# A Monte Carlo approach for estimating the change of success in an observer program
+
+We can understand the potential for failure caused bt ignoring aggregation by asking how likely one is to obtain statistically meaningful data for a given level of observer coverage. This question can be answered using a Monte Carlo method...
+
+$$Pr(C_{i}=c)=p(c)=\frac{\Gamma(k+c)}{\Gamma(k)c!}\left( \frac{k}{k+m} \right)^{k}\left( \frac{m}{m+k} \right)^{c}$$
+
+```{r pseudCode4.1}
+
+byctch<-read.csv("data/table_4_3.csv")%>%
+  rename(nTows=frequency,nBrds=bycatch) %>%
+  mutate(totBrds=nBrds*nTows) %>%
+  #mutate(propTow=(bycatch*frequency/sum(frequency)))
+  summarise(m=sum(totBrds)/sum(nTows),
+            s=sum(nTows*(nBrds-m)^2)/(sum(nTows)-1))
+
+## calculate mean
+m=sum(byctch$totBrds)/sum(byctch$frequency) # weighted means 
+#m2=sum(byctch$propTow)/sum(byctch$frequency) # this is waaaay too small
+
+Ntow=1000
+Nsim=150
+mDat=byctch$m
+kDat=(mDat^2)/(byctch$s-mDat)
+d=0.25
+tq=qt(0.95,Ntow-1) # qt(1-alpha/2,df=N-1
+
+```
+
+Calculate probabilities of $C_{i}$ using the $\Gamma$ distribution
+
+```{r pseudCode4.2}
+
+prC<-function(c,m=mDat,k=kDat){
+  p=(gamma(k+c)/(gamma(k)*factorial(c)))*(k/(k+m))^k*(m/(m+k))^c
+  return(p)
+}
+
+sim1=data.frame(bc=c(0:50),
+                probBc=sapply(0:50,function(x) prC(x))) %>%
+  mutate(randUnif=runif(51,0,1))%>%
+  mutate(cuSum=cumsum(probBc))
+
+plot(sim1$bc,sim1$cuSum,type="l",
+     xlab="bycatch level",ylab="cumulative prob")
+
+```
+
+Apply random numbers to the distribution function
+
+```{r loopSims}
+simTow<-matrix(data=NA,nrow=Ntow,ncol=Nsim)
+
+for(i in 1:Ntow){
+  rn<-runif(1,0,1)
+  
+}
+```
+
+### Here I am stuck, can we walk through this?
