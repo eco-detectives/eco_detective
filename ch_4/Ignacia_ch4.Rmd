@@ -1,0 +1,147 @@
+---
+title: "Chapter 4: Incidental catch in fisheries "
+author: "Ignacia Rivera"
+date: "July 2, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+```
+
+### 4.1 A Montecarlo approach for estimating the chance of success in an observer program
+
+How likely one is obtain statistically meaningful data for a given level of observer coverage?
+
+#### Step 1. Estimating k and m from the data
+
+To estimate $m$ and $k$ from the data we consider:
+
+$$E\{C_i\} = m = \frac{1}{N_{last}} \sum c_i$$
+$$VAR\{C_i\} = m + \frac{m^2}{k} = \frac{1}{N_{last} - 1} \sum (c_i - m)^2$$
+
+```{r Estimating k and m from the data}
+
+# Importing frequency distribution of by-catch.
+
+data  <- readxl::read_xlsx(here::here("ch_4", "data", "table_4_3.xlsx"), sheet = 1, skip= 2)
+colnames(data) <- c("n.birds", "freq")
+
+# Estimating m and k parameters for negative binomial distirbution from the data
+
+data.param <- data %>% 
+  dplyr::mutate(obsv = n.birds*freq) %>% 
+  dplyr::summarise(m = sum(obsv)/sum(freq), VAR = sum(((n.birds - m)^2)*freq) / (sum(freq) - 1), k = m^2/(VAR - m))
+
+knitr::kable(data.param)
+
+```
+
+#### Step 2. Negative binomial distribution for $n$ birds in the by-catch of one tow.
+
+The number of birds present in the by-catch of one tow is decribed by a negative binomial distribution. We will draw a random value from a negative binomial distribution with parameters $m$ and $k$ to determine the number of birds caught in a tow (Figure 1). To do this we first generate a random number from a unifrom distribution and then see where it falls in the cumulative density function of a negative binomial distribution (Figure 2). 
+
+```{r Negative binomial distirbution, echo= FALSE}
+
+# Generating a negative binomial distribution for different number of caught birds (c)
+
+neg.binom <- function (n, k, m) { #This function calculates the probability of c with k and m parameters 
+  
+  pr.n = ((gamma(k+n))/(gamma(k)*factorial(n))) * ((k/(k+m))^k) * (m/(m+k))^n # based on eq. 4.7
+  
+  neg.binom.n = data.frame(n.birds = n, pr.n = pr.n, cum.pr.n = cumsum(pr.n)) %>% 
+    dplyr::mutate(floor.n = dplyr::lag(cum.pr.n, n=1, default = 0))
+  
+  return(neg.binom.n)
+  
+}
+
+# Probability of having c birds in one tow
+example <- neg.binom (n = c(seq(from=0, to =40, by=1)), k = data.param$k, m = data.param$m)
+
+# Plot denisty function
+plot(example$n.birds, example$pr.n, xlab= "number of caught birds", ylab= "probability", main = "Density function")
+
+plot(example$n.birds, example$cum.pr.n, xlab= "number of caught birds", ylab= "cumulative probability",  main = "Cumulative Density function")
+
+```
+
+#### Step 3. Simulating $N_{sim}$ of $N_{tow}$ each one and compute number of successes. 
+
+This is a function that first, calculates the cumulative probabilities for the $n$  birds in the by-catch based on a negative binomial distribution with parameters $k$ and $m$. Then, runs $N_{sim}$ simulations to estimate the probability of success of $N_{tow}$ tows in gathering statistically meaningfully data based on the confidence level we want (given by $t_q$) and the tolerable error of the mean (given by $d$).
+
+```{r N.sim simulations of N_tow tows}
+
+pr.success.n.tows <- function(n, m, k, N.sim, N.tow, tq, d){ #n is a vector
+  
+# Generates dataframe with prob of n birds in by-catch, and cumulative probility
+  
+pr.n = ((gamma(k+n))/(gamma(k)*factorial(n))) * ((k/(k+m))^k) * (m/(m+k))^n # based on eq. 4.7
+  
+prob = data.frame(n.birds = n, pr.n = pr.n, cum.pr.n = cumsum(pr.n)) %>% 
+    dplyr::mutate(floor.n = dplyr::lag(cum.pr.n, n=1, default = 0))
+
+# Store the mean and the variance of number of birds in the by-catch for each simulation
+mean <- rep(NA, N.sim)
+var <- rep(NA, N.sim)
+
+for(j in 1:N.sim){
+
+# Stores number of birds in the by-catch for each tow
+C.i = rep(NA, N.tow)
+
+ for (i in 1:N.tow){
+  
+  u = runif(1) # draws a random number from an uniform distirbution
+  n.birds.tow.i = prob$n.birds[which(u > prob$floor.n & u < prob$cum.pr.n)] # test where does u fall in the CDF generated above to fill the number of birds in the ith tow (from Casey's code)
+  
+  if(length(n.birds.tow.i) == 0) {
+      # If there is no interval in where the draw number falls, we assign the max   number of birds in our vector. 
+      n.birds.tow.i = max(prob$n.birds) # adapted from Casey's code. 
+  }
+  
+  # store the number of birds caught in each i tow
+  C.i[i] = n.birds.tow.i
+ }
+
+mean[j] = mean(C.i)
+var[j] = var(C.i)
+
+}
+
+# Computes the number of successes (statistically meaningfull data) with N.tows
+pr.success <- data.frame(j = seq(1:N.sim), mean= mean, var= var) %>% 
+  dplyr::mutate(range = 2 * sqrt(var / N.tow) * tq, success= ifelse(range < d*mean, 1, 0)) %>% 
+  dplyr::summarise(pr.success = sum(success)/N.sim)
+
+pr.success <- as.numeric(pr.success) #transforming data frame to numeric
+
+}
+
+```
+
+#### Step 4. What is the probability of succes for different $N_{tow}$?. 
+
+Using the function above we calculate the prbability of success for different number of tows by iterating over $N_{tow}$. 
+
+```{r Calculating prob of success for different N.tow}
+
+# Setting parameters
+
+seq.tows <- c(seq(from= 1, to= 5000, by= 500))
+
+pr.success.n.tows.store <- rep(NA, length(seq.tows))
+
+for (k in 1:length(seq.tows)){  
+  
+pr.success.n.tows.store[k] <- pr.success.n.tows(n = c(seq(from=0, to =40, by=1)), m = data.param$m, k = data.param$k, N.sim = 100, N.tow = seq.tows[k],  tq = 1.645, d = 0.25)
+
+}
+
+pr.success.n.tows.dta <- data.frame(seq.tows, pr.success.n.tows.store)
+
+plot(seq.tows, pr.success.n.tows.store, type= 'l', ylab= 'Probability of success', xlab = 'Number of tows')
+
+
+```

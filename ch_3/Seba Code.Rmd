@@ -56,7 +56,10 @@ probKNPest(p=0.2)
 probKNPest(p=0.3)
 ```
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 2c184cfb01d28e79d05cdd98913d3a9de426600b
 #PSEUDOCODE 3.2 
 ```{r Pseudocode 3.2 with while loop}
 r <- 0.05
@@ -70,6 +73,16 @@ i <- 1
 k <- NA
 k[1] <- 0
 
+<<<<<<< HEAD
+=======
+p_k_t <- NA
+p_k_t[1] <- Pot
+i <- 1
+k <- NA
+k[1] <- 0
+
+
+>>>>>>> 2c184cfb01d28e79d05cdd98913d3a9de426600b
 while(Sum < cutoff){
   i <- i + 1 #make the loop iterate over i
   k[i] <- k[i-1] + 1 #set k[i] for the next loop
@@ -78,6 +91,10 @@ while(Sum < cutoff){
   Sum = Sum + p_k_t[i]
 }
 plot(x=k, y=p_k_t)
+<<<<<<< HEAD
+=======
+
+>>>>>>> 2c184cfb01d28e79d05cdd98913d3a9de426600b
 ```
 
 #PSEUDOCODE 3.3
@@ -100,8 +117,12 @@ while (Sum < U){
   p_k_n[i] <- choose(N,k[i])*((p)^k[i])*((1-p)^(N-k[i]))
   Sum <- Sum + p_k_n[i]
 }
+<<<<<<< HEAD
 plot(x=k, y=p_k_n, ylab="p(K,N)")
 plot(x=k, y=cumsum(p_k_n), ylab= "cummulative p(K,N)" )
+=======
+plot(x=k, y=p_k_n)
+>>>>>>> 2c184cfb01d28e79d05cdd98913d3a9de426600b
 U
 ```
 
@@ -132,4 +153,8 @@ ObsVsPred <-melt(ObsVsPred, id=c("t"))
 ggplot(ObsVsPred, aes(x=t, y=value, color=variable))+
   geom_point()
 
+<<<<<<< HEAD
 ```
+=======
+ ```
+>>>>>>> 2c184cfb01d28e79d05cdd98913d3a9de426600b
