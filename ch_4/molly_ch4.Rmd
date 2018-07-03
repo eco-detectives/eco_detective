@@ -13,8 +13,9 @@ output:
 ```{r, echo=FALSE, warning=FALSE}
 library(dplyr)
 library(ggplot2)
+library(reshape)
 
-data_bycatch <-read.csv('./ch_4/data/table_4_3.csv')
+data_freq <-read.csv("../ch_4/data/table_4_3.csv")
 ```
 
 # Chapter 4: Incidental catch in fisheries - seabirds in the New Zealand squid trawl fishery
@@ -22,4 +23,78 @@ data_bycatch <-read.csv('./ch_4/data/table_4_3.csv')
 In this chapter we are trying to determine the minimum number of onboard observers needed to give an accurate representation of bycatch data based on different amounts of process and observation uncertainty.
 
 ## 4.1: A Monte Carlo approach for estimating the chance of success in an observer program
+
+1. Specify the number of tows ($N_{tow}$), number of simulations ($N_{sim}$), the negative binomial parameters $m$ (mean proxy) and $k$ (overdispersion parameter), the criterion success ($d$), and the confidence level value of $t_q$ 
+
+For parameters $m$ and $k$, we will use the data to calculate these values according to the given equations:
+$$E[C_i] = m$$
+$$Var(C_i) = m + \frac{m^2}{k}$$
+
+```{r}
+data_raw <- data_freq[rep(1:nrow(data_freq), data_freq[["frequency"]]), ] # expand frequency table
+
+m_data <- mean(data_raw$bycatch) 
+var <- var(data_raw$bycatch) 
+k_data <- m^2/(var-m) # calculate k (matches 0.06 given in text)
+N_tow <- 1000
+N_sim <- 150
+d <- 0.25 # why can we just make this up, and not use equation given...? In text they set to 0.25
+t_q <- 1.645 #t value at 90% CI
+```
+
+2. Use equation 4.7 to determine incidental bycatch levels for any given tow in any given simulation using uniform random numbers and matching these with CDF values:
+
+$$\Pr(C_i = c) = p(c) = \frac{\Gamma(k + c)}{\Gamma(k)c!} \left(\frac{k}{k+m}\right)^k \left(\frac{m}{m + k}\right)^c$$
+
+```{r}
+p_bycatch <- function(c, k=k_data, m=m_data){
+  p <- (gamma(k+c))/(gamma(k)*factorial(c))*((k/(k+m))^k)*((m/(m+k))^c)
+  return(p)
+}
+
+bycatch_df <- data.frame(c_birds = 0:50, pr_c = p_bycatch(0:50)) %>%
+  mutate(cdf_c = cumsum(pr_c),
+         cdf_floor = lag(cdf_c, default = 0)) %>% # adapting Casey's logic for creating CDF ranges
+  mutate(dummy=TRUE)
+
+
+observed_df <- data.frame(sim = rep(1:N_sim, each = N_tow), tow = rep(1:N_tow, times = N_sim)) %>%
+  mutate(u = runif(n = n(), min = 0, max = 1)) %>% # draw random uniform number 
+  mutate(dummy=TRUE)
+
+# selectively merge data frames so that chosen u values are linked with corresponding c_bird values
+observed_df <- inner_join(observed_df, bycatch_df, by="dummy") %>% 
+  filter(cdf_c>=u,cdf_floor<u) %>% # filters only values in which u falls within cdf range
+  select(-dummy) 
+  
+
+```
+
+3. Compute the running mean and the variance at each iteration of the simulation
+
+```{r}
+observed_df <- observed_df %>% group_by(sim) %>% mutate(cum_mean=cummean(c_birds), cum_var=1/(N_tow-1)*cumsum(c_birds-cum_mean)^2) 
+```
+
+4. Compute the running range at each iteration of the simulation (equation 4.4)
+$$Range_j=2*\frac{S_j}{\sqrt{N_{tow}}}*t_q$$
+
+
+```{r}
+observed_df <- observed_df %>% group_by(sim) %>% mutate(range=2*sqrt(cum_var)/sqrt(tow)*t_q)
+```
+
+5. If $Range_j$ is less than $d$ (specified success criterion), increase the number of successes by 1
+
+```{r}
+observed_df <- observed_df %>% group_by(sim) %>% mutate(success = ifelse(range<d,1,0))
+```
+
+6. Estimate the probability of success when $N+{tows}$ are observed by dividing the total number of successes by $N$
+
+```{r}
+test <- observed_df %>% group_by(sim) %>% mutate(p_success = cumsum(success)/tow)
+
+ggplot(test,aes(x=tow,y=p_success, factor=sim)) + geom_point()
+```
 
