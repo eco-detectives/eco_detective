@@ -1,0 +1,92 @@
+---
+title: "Ecological Detective - Chapter 4"
+author: "Seba Tapia"
+date: "7/2/2018"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(vcdExtra)
+```
+
+#load dataframes
+```{r load dataframes}
+SummaryData <- read.csv("/Users/seba/github/eco_detective/ch_4/data/table_4_2.csv")
+colnames(SummaryData) <- c("Dates", "TowsObserved", "ByCatch", "Capture rate (birds/tow)")
+SummaryData <- SummaryData[-c(1,8),]
+SummaryData <- apply(SummaryData,2,as.numeric)
+SummaryData <- as.data.frame(SummaryData)
+
+FrequencyData <- read.csv("/Users/seba/github/eco_detective/ch_4/data/table_4_3.csv")
+ExpandedData <- expand.dft(FrequencyData, var.names="bycatch", freq="frequency")
+```
+
+#A Montecarlo approach for estimating chance of success in observer program
+# Pseudocode 4.2 Step 1
+```{r pseudocode 4.2 step 1}
+#First, got to calculate m and s'^2
+
+m <- (1 / sum(SummaryData$TowsObserved))*sum(SummaryData$ByCatch) #Equation 4.1
+SampleVar <- (1 / (nrow(ExpandedData)-1))*sum((ExpandedData$bycatch - m)^2) #Equation 4.2
+d <- ((sqrt(SampleVar))/(sqrt(nrow(ExpandedData))))*1.96  #eqaution 4.5 to find tolerable error of mean
+Ntow <- ((SampleVar)/(d^2))*(1.96^2)  #Equation 4.6 to find required level of observer coverage
+k <- (m^2)/(SampleVar-m)  #Equation 4.8 to find k (number of successes)
+tq <- 1.96 #t-value at 95% CI
+cvec <- seq(0,50, by=1)
+```
+
+##Step 2
+```{r Step 2}
+#First, set up the probability calculation for a given bycatch level on the ith tow, then calculate cumulative probability for up to a level of bycatch
+
+PByCatch <- function(c=cvec, k=k, m=m){
+
+Term1 <- (gamma(k+c))/(gamma(k)*factorial(c))
+Term2 <- ((k)/(k+m))^k
+Term3 <-  ((m)/(m+k))^c
+p <- Term1 * Term2 * Term3
+CumP <- cumsum(p)
+CumPDF <- data.frame(c,p,CumP)
+#return(CumPDF)
+plot(x=c, y=p, xlab, xlab="Birds in bycatch", ylab="Probabililty")
+plot(x=c, y=CumP,  xlab="Birds in bycatch", ylab="Cummulative P")
+}
+PByCatch(c=cvec,k=k,m=m) #The probability for a tow to have 1 bird as bycatch is 0.04
+PByCatch(c=0,k=k, m=m) #The probability for a tow to have 1 bird as bycatch is 0.91
+
+#now, make a loop that for each tow draws a random uniform number
+
+TowVec <- seq(from=1, to=Ntow, by=1)
+
+  Uvec <- vector(length=length(TowVec))
+for(i in TowVec){
+  Uvec[i] <- runif(n=1,min=0,max=1)
+  #cat('i = ', i, ' U = ', Uvec[i])
+}
+print(Uvec)
+
+#Compute the mean
+
+CompMean <- (1/Ntow)*sum(Uvec) #or mean(Uvec)
+CompVar  <- (1/(Ntow=1))*(sum(Uvec-CompMean)^2)
+Range    <- 2*((sqrt(CompVar))/(sqrt(Ntow)))*1.96
+
+nsuccess <- 0
+
+if (Range<d) {
+  nsuccess <- nsuccess+1
+}
+
+
+#for (b in seq(0,12,by=1)){
+  
+  #Pc <- vector(length = length(c), "numeric")
+   #cat('i = ', i, ' P = ', Pc)
+  #Pc[b] <- PByCatch(c=b[i], k=k, m=m)
+  
+#}
+  
+
+```
