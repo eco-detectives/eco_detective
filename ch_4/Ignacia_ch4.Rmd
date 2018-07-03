@@ -10,9 +10,9 @@ knitr::opts_chunk$set(echo = TRUE)
 library(magrittr)
 ```
 
-### 4.1 A Montecarlo approach for estimating the chance of success in an observer program
+### A Montecarlo approach for estimating the chance of success in an observer program
 
-How likely one is obtain statistically meaningful data for a given level of observer coverage?
+How likely one is to obtain statistically meaningful data for a given level of observer coverage?
 
 #### Step 1. Estimating k and m from the data
 
