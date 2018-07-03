@@ -75,14 +75,25 @@ CumPdf <- read.csv("~/github/eco_detective/ch_4/ByCatchProb.csv")[ ,2:5] #Load s
 
 #now, make a loop that for each tow draws a random uniform number and store it as UVec
 
-for(i in TowVec){
-  Uvec[i] <- runif(n=1,min=0,max=1)
+
+
+Bycatch <- vector(length=length(Uvec))
+for (j in 1:nsim){
+   Uvec <- runif(n=Ntow,min=0,max=1)
+for (i in 1:Ntows){
+ Bycatch[i] <- CumPdf$c[which(Uvec[i] < CumPdf$CumP & Uvec[i] > CumPdf$CumPFloor)]
 }
-
-Uvec <- data.frame(Uvec)
-
+CalculateMean
+CalculateVar
+Range
+if(Range<d){
+  successes = successes+1
+}
+}
+  
 #Let's see where "U lies in our cummulative probability distribution". Give every U a catch value, based on the cumullative probability distribution
 
+#CumPdf$c[which(Uvec[i] < CumPdf$CumP & Uvec[i] > CumPdf$CumPFloor)]
 
 setkey(setDT(CumPdf), CumP) #sets Cum P as reference point
 x <- CumPdf[Uvec, roll="nearest"] #joins Uvec and CumPDF and finds the nearest value, stores catch in c
@@ -103,17 +114,18 @@ nsuccess
 
 #Step 6 Iterating over sims: many failed attemptes
 ```{r eval=FALSE}
-
+SimCatch <- matrix(NA, nrow=Ntow, ncol=nsims)
 U <- vector(length=length(Ntow))
 C <- vector(length=length(Ntow))
-
+for (j in 1:nsims){
 for(i in TowVec){
   U[i] <- runif(n=1,min=0,max=1)
-  cat('i = ', i,' U = ', U, 'x=',C)
-  
-  C[i] <- CumPdf$c[which(U <= CumPdf$CumP & U>= CumPdf$CumPFloor)] #joins Uvec and CumPDF and finds the nearest value, stores catch in c
-  SimData <- data.frame(U,C)
+   #joins Uvec and CumPDF and finds the nearest value, stores catch in c
 }
+U <- as.data.frame(U)
+x <- CumPdf[U, roll="nearest"]
+SimCatch[,j] <- x$c
+return(SimCatch)
 }
 #Uvec <- data.frame(Uvec)
 
