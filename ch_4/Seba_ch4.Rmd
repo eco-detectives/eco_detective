@@ -10,6 +10,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(vcdExtra)
 library(dplyr)
+library(data.table)
 ```
 
 #load dataframes
@@ -45,10 +46,14 @@ tq <- 1.96 #t-value at 95% CI
 TowVec <- seq(from=1, to=Ntow, by=1) #Vector of tows
 cvec <- seq(0,50, by=1)  #Vector of catches from 0 to 5
 Uvec <- vector(length=length(TowVec))  #Empty vector for storing "U" (random value between 0 and 1) for each tow
-SimCVec <- vector(length=length(TowVec))
+
+SimMean <- vector(length=length(nsims))
+SimVar <- vector(length=length(nsims))
+SimRange   <- vector(length=length(nsims))
+#Empty vectors for the mean, variance and range of each simulation
 ```
 
-##Step 2
+##Step 2-5
 ```{r Step 2}
 #First, set up the probability calculation for a given bycatch level on the ith tow, then calculate cumulative probability for up to a level of bycatch
 
@@ -61,33 +66,65 @@ p <- Term1 * Term2 * Term3
 CumP <- cumsum(p)
 CumPFloor <- lag(CumP, default=0)
 CumPDF <- data.frame(c,p,CumP, CumPFloor)
-print(CumPDF)
 write.csv(CumPDF, "ByCatchProb.csv")
 plot(x=c, y=p, xlab="Birds in bycatch", ylab="Probabililty")
-plot(x=c, y=CumP,  xlab="Birds in bycatch", ylab="Cummulative P")
-}
+plot(x=c, y=CumP,  xlab="Birds in bycatch", ylab="Cummulative P")}
 PByCatch(c=cvec,k=k,m=m) #Store a csv with trobability of having c Birds in a net (p) and c or less birds in a net (cumP)
 
 CumPdf <- read.csv("~/github/eco_detective/ch_4/ByCatchProb.csv")[ ,2:5] #Load said csv
-
 
 #now, make a loop that for each tow draws a random uniform number and store it as UVec
 
 for(i in TowVec){
   Uvec[i] <- runif(n=1,min=0,max=1)
-  #SimCVec <- which(Uvec < CumPdf$CumP & Uvec > CumPdf$CumPFloor)
-  #SimByCatch <- CumPdf$c[SimCVec]
-  #cat('i = ', i, ' U = ', Uvec, 'SimC=', SimByCatch)
 }
+
 Uvec <- data.frame(Uvec)
+
+#Let's see where "U lies in our cummulative probability distribution". Give every U a catch value, based on the cumullative probability distribution
+
+
+setkey(setDT(CumPdf), CumP) #sets Cum P as reference point
+x <- CumPdf[Uvec, roll="nearest"] #joins Uvec and CumPDF and finds the nearest value, stores catch in c
+SimByCatch <- x$c
+hist(SimByCatch)  #draw and histogram to make sure the output makes sense
+
+  
+nsuccess <- 0
+
+SimMean <- mean(SimByCatch)
+SimVar  <- (1/(Ntow=1))*(sum(SimByCatch-SimMean)^2)
+Range    <- 2*((sqrt(SimVar))/(sqrt(Ntow)))*1.96
+if (Range<d) {
+  nsuccess <- nsuccess+1
+}
+nsuccess
+```
+
+#Step 6 Iterating over sims: many failed attemptes
+```{r eval=FALSE}
+
+U <- vector(length=length(Ntow))
+C <- vector(length=length(Ntow))
+
+for(i in TowVec){
+  U[i] <- runif(n=1,min=0,max=1)
+  cat('i = ', i,' U = ', U, 'x=',C)
+  
+  C[i] <- CumPdf$c[which(U <= CumPdf$CumP & U>= CumPdf$CumPFloor)] #joins Uvec and CumPDF and finds the nearest value, stores catch in c
+  SimData <- data.frame(U,C)
+}
+}
+#Uvec <- data.frame(Uvec)
 
 #Let's see where "U lies in our cummulative probability distribution". Give every U a catch value, based on the cumullative probability distribution
 #SimDF <- matrix(data=NA, nrow=Ntow, ncol=5)
 
-library(data.table)
-setkey(setDT(CumPdf), CumP)
-x <- CumPdf[Uvec, roll="nearest"]
+
+setkey(setDT(CumPdf), CumP) #sets Cum P as reference point
+x <- CumPdf[Uvec, roll="nearest"] #joins Uvec and CumPDF and finds the nearest value, stores catch in c
 SimByCatch <- x$c
+hist(SimByCatch)  #draw and histogram to make sure the output makes sense
 
   
 nsuccess <- 0
@@ -95,21 +132,18 @@ CompMean <- NA
 CompVar <- NA
 Range <- NA
 
-
-for(i in TowVec){
-  Uvec[i] <- runif(n=1,min=0,max=1)
-  #cat('i = ', i, ' U = ', Uvec)
-}
+function()
 
 
 
-CompMean[s] <- (1/Ntow)*sum(Uvec) #or mean(Uvec)
-CompVar[s]  <- (1/(Ntow=1))*(sum(Uvec-CompMean)^2)
-Range[s]    <- 2*((sqrt(CompVar))/(sqrt(Ntow)))*1.96
+
+SimMean <- mean(SimByCatch)
+SimVar  <- (1/(Ntow=1))*(sum(SimByCatch-SimMean)^2)
+Range    <- 2*((sqrt(SimVar))/(sqrt(Ntow)))*1.96
 
 cat('i = ', i, ' U = ', Uvec[i], 'Mean = ', CompMean, 'Var=', CompVar, 'Range=', Range)
 
-if (Range[s]<d) {
+if (Range<d) {
   nsuccess <- nsuccess+1
 }
 
@@ -122,5 +156,7 @@ if (Range[s]<d) {
   
 #}
   
+
+```
 
 ```
