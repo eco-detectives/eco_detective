@@ -9,6 +9,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(vcdExtra)
+library(dplyr)
 ```
 
 #load dataframes
@@ -26,15 +27,25 @@ ExpandedData <- expand.dft(FrequencyData, var.names="bycatch", freq="frequency")
 #A Montecarlo approach for estimating chance of success in observer program
 # Pseudocode 4.2 Step 1
 ```{r pseudocode 4.2 step 1}
-#First, got to calculate m and s'^2
+#First, got to calculate m and k from last year's data
 
-m <- (1 / sum(SummaryData$TowsObserved))*sum(SummaryData$ByCatch) #Equation 4.1
-SampleVar <- (1 / (nrow(ExpandedData)-1))*sum((ExpandedData$bycatch - m)^2) #Equation 4.2
-d <- ((sqrt(SampleVar))/(sqrt(nrow(ExpandedData))))*1.96  #eqaution 4.5 to find tolerable error of mean
-Ntow <- ((SampleVar)/(d^2))*(1.96^2)  #Equation 4.6 to find required level of observer coverage
-k <- (m^2)/(SampleVar-m)  #Equation 4.8 to find k (number of successes)
+m <- (1 / nrow(ExpandedData))*sum(ExpandedData$bycatch) #Equation 4.1
+SampleVar <- (1 / (nrow(ExpandedData)-1))*sum((ExpandedData$bycatch - m)^2) #Equation 4.2 for the sample variance needed for k
+k <- (m^2)/(SampleVar-m)  #Equation 4.8 to find k (number of successes??)
+
+#Then set some parameters for starters
+d <- 0.15  #Tolerable error of the mean (ceq 4.5)
+Ntow <- 3000 #Number of tows per simulation
+nsims  <- 300 #Number of simulations
+  
+  #((SampleVar)/(d^2))*(1.96^2)  #Equation 4.6 to find required level of observer coverage
+  #((sqrt(SampleVar))/(sqrt(nrow(ExpandedData))))*1.96  #eqaution 4.5 to find tolerable error of mean
+
 tq <- 1.96 #t-value at 95% CI
-cvec <- seq(0,50, by=1)
+TowVec <- seq(from=1, to=Ntow, by=1) #Vector of tows
+cvec <- seq(0,50, by=1)  #Vector of catches from 0 to 5
+Uvec <- vector(length=length(TowVec))  #Empty vector for storing "U" (random value between 0 and 1) for each tow
+SimCVec <- vector(length=length(TowVec))
 ```
 
 ##Step 2
@@ -48,34 +59,57 @@ Term2 <- ((k)/(k+m))^k
 Term3 <-  ((m)/(m+k))^c
 p <- Term1 * Term2 * Term3
 CumP <- cumsum(p)
-CumPDF <- data.frame(c,p,CumP)
-#return(CumPDF)
-plot(x=c, y=p, xlab, xlab="Birds in bycatch", ylab="Probabililty")
+CumPFloor <- lag(CumP, default=0)
+CumPDF <- data.frame(c,p,CumP, CumPFloor)
+print(CumPDF)
+write.csv(CumPDF, "ByCatchProb.csv")
+plot(x=c, y=p, xlab="Birds in bycatch", ylab="Probabililty")
 plot(x=c, y=CumP,  xlab="Birds in bycatch", ylab="Cummulative P")
 }
-PByCatch(c=cvec,k=k,m=m) #The probability for a tow to have 1 bird as bycatch is 0.04
-PByCatch(c=0,k=k, m=m) #The probability for a tow to have 1 bird as bycatch is 0.91
+PByCatch(c=cvec,k=k,m=m) #Store a csv with trobability of having c Birds in a net (p) and c or less birds in a net (cumP)
 
-#now, make a loop that for each tow draws a random uniform number
+CumPdf <- read.csv("~/github/eco_detective/ch_4/ByCatchProb.csv")[ ,2:5] #Load said csv
 
-TowVec <- seq(from=1, to=Ntow, by=1)
 
-  Uvec <- vector(length=length(TowVec))
+#now, make a loop that for each tow draws a random uniform number and store it as UVec
+
 for(i in TowVec){
   Uvec[i] <- runif(n=1,min=0,max=1)
-  #cat('i = ', i, ' U = ', Uvec[i])
+  #SimCVec <- which(Uvec < CumPdf$CumP & Uvec > CumPdf$CumPFloor)
+  #SimByCatch <- CumPdf$c[SimCVec]
+  #cat('i = ', i, ' U = ', Uvec, 'SimC=', SimByCatch)
 }
-print(Uvec)
+Uvec <- data.frame(Uvec)
 
-#Compute the mean
+#Let's see where "U lies in our cummulative probability distribution". Give every U a catch value, based on the cumullative probability distribution
+#SimDF <- matrix(data=NA, nrow=Ntow, ncol=5)
 
-CompMean <- (1/Ntow)*sum(Uvec) #or mean(Uvec)
-CompVar  <- (1/(Ntow=1))*(sum(Uvec-CompMean)^2)
-Range    <- 2*((sqrt(CompVar))/(sqrt(Ntow)))*1.96
+library(data.table)
+setkey(setDT(CumPdf), CumP)
+x <- CumPdf[Uvec, roll="nearest"]
+SimByCatch <- x$c
 
+  
 nsuccess <- 0
+CompMean <- NA
+CompVar <- NA
+Range <- NA
 
-if (Range<d) {
+
+for(i in TowVec){
+  Uvec[i] <- runif(n=1,min=0,max=1)
+  #cat('i = ', i, ' U = ', Uvec)
+}
+
+
+
+CompMean[s] <- (1/Ntow)*sum(Uvec) #or mean(Uvec)
+CompVar[s]  <- (1/(Ntow=1))*(sum(Uvec-CompMean)^2)
+Range[s]    <- 2*((sqrt(CompVar))/(sqrt(Ntow)))*1.96
+
+cat('i = ', i, ' U = ', Uvec[i], 'Mean = ', CompMean, 'Var=', CompVar, 'Range=', Range)
+
+if (Range[s]<d) {
   nsuccess <- nsuccess+1
 }
 
