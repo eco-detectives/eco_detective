@@ -29,7 +29,7 @@ byctch<-read.csv("data/table_4_3.csv")%>%
 m=sum(byctch$totBrds)/sum(byctch$frequency) # weighted means 
 #m2=sum(byctch$propTow)/sum(byctch$frequency) # this is waaaay too small
 
-Ntow=1000
+Ntow=5000
 Nsim=150
 mDat=byctch$m
 kDat=(mDat^2)/(byctch$s-mDat)
@@ -49,23 +49,106 @@ prC<-function(c,m=mDat,k=kDat){
 
 sim1=data.frame(bc=c(0:50),
                 probBc=sapply(0:50,function(x) prC(x))) %>%
-  mutate(randUnif=runif(51,0,1))%>%
-  mutate(cuSum=cumsum(probBc))
+  #mutate(randUnif=runif(51,0,1))%>% # make this in the loop
+  mutate(cuSum=cumsum(probBc)) %>%
+  mutate(cuSumLo=c(0,cuSum[1:nrow(.)-1])) ## add lagged column to make the intervals (also could use "lag" function)
 
 plot(sim1$bc,sim1$cuSum,type="l",
      xlab="bycatch level",ylab="cumulative prob")
 
 ```
 
-Apply random numbers to the distribution function
+##### Try one simulation of tows
+Simulate how many birds would be caught for each randomly produced tow based on our data distribution
+
+```{r oneSim}
+simVec<-vector(length=Ntow) # make this a column in a vector below
+rn<-runif(n=Ntow,0,1) # run this in the simulation loop below to get a new set of random #s for each simulation
+  
+for(i in 1:Ntow){
+  simVec[i]<-which(rn[i]>sim1$cuSumLo & rn[i]<sim1$cuSum)-1
+} #
+
+m1=sum(simVec)/Ntow # or mean(simVec)
+
+s1=sum(sapply(simVec,function(x) x-m1)^2)/(Ntow-1) #or sd(simVec)^2
+
+```
+
+##### Loop through additional simulations (Nsim)
 
 ```{r loopSims}
 simTow<-matrix(data=NA,nrow=Ntow,ncol=Nsim)
 
-for(i in 1:Ntow){
-  rn<-runif(1,0,1)
+mnsVec<-vector(length = Nsim)
+varVec<-vector(length = Nsim)
+rngVec<-vector(length = Nsim)
+
+for(j in 1:Nsim){
+  rn<-runif(n=Ntow,0,1)
+  
+  for(i in 1:Ntow){
+    simTow[i,j]<-which(rn[i]>sim1$cuSumLo & rn[i]<sim1$cuSum)-1
+  
+  }
+  
+  mnsVec[j]<-sum(simTow[,j])/Ntow
+  varVec[j]<-sum(sapply(simTow[,j],function(x) x-mnsVec[j])^2)/(Ntow-1) 
+  #rngVec[j]<-2*sqrt(varVec[j]/Ntow)*tq
   
 }
 ```
 
-### Here I am stuck, can we walk through this?
+## Probability of success
+
+Successes occur when the range smaller the defined uncertainty level: d x mean. 
+
+```{r probSucc}
+
+prSuc<-data.frame(means=mnsVec,
+                  vaR=varVec)%>%
+  mutate(rngs=2*sqrt(vaR/Ntow)*tq,
+         criteria=means*d,
+         succ=rngs<criteria)
+
+sum(prSuc$succ)
+```
+
+### Plot the probabilties of success for different numbers of tows
+
+Will need to loop through the above simulations and statistics for a variety of different Ntow values. So adding an additional outside loop to loop throught the different values. 
+
+```{r probSuccPlt}
+ntowVec<-c(0:5000)
+
+simArry<-array(data=NA,dim=c(Ntow,Nsim,length(ntowVec)))
+
+summArry<-matrix(data=NA,nrow=Nsim,ncol=length(ntowVec))
+
+for(k in 1:length(ntowVec)){
+  
+  for(j in 1:Nsim){
+    rn<-runif(n=Ntow,0,1)
+  
+    for(i in 1:Ntow){
+      simTow[i,j]<-which(rn[i]>sim1$cuSumLo & rn[i]<sim1$cuSum)-1
+  }
+  
+  summArry[j,k]<-sum(simTow[,j])/ntowVec[k]
+  varVec[j]<-sum(sapply(simTow[,j],function(x) x-mnsVec[j])^2)/(Ntow-1) 
+  #rngVec[j]<-2*sqrt(varVec[j]/Ntow)*tq
+  
+}
+
+prSuc<-data.frame(means=mnsVec,
+                  vaR=varVec)%>%
+  mutate(rngs=2*sqrt(vaR/Ntow)*tq,
+         criteria=means*d,
+         succ=rngs<criteria)
+
+sum(prSuc$succ)
+}
+
+```
+
+...NOT complete, look at this and replace old code with stuff that works
