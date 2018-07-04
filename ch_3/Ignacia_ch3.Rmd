@@ -78,7 +78,7 @@ i = 1
 
 while (sum < cutoff){
   k = i
-<<<<<<< HEAD
+
   pkt = ((r*t)/k)*pk[i]
   pk[i+1] = pkt 
   sum =  sum + pkt 
@@ -129,13 +129,7 @@ while (sum < U){
    
   #prints iteration values
   cat( 'i =', i, 'k= ', k, 'pkN = ', pkN, 'sum = ', sum)
-=======
-  cat('i = ', i, ' k = ', k, ' sum = ', sum, '\n')
-  p_k_t = ((r*t)/k)*p_k[i]
-  p_k[i+1] = p_k_t 
-  sum =  p_k_t + p_k[i+1]
->>>>>>> c50f6f6f381cf8fc693f73664f4eb6c1cb1091c5
-  
+
   i= i+1
   
 }
