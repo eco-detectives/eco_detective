@@ -1,0 +1,31 @@
+---
+title: 'Ch5: sum of squares HW'
+author: "Jessica Couture"
+date: "July 6, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Pseudocode 5.1: Calculate sums of squares to estimate parameters
+
+Input the data, the range of parameter values adn the size increment used for cycling over the parameters
+
+```{r createData}
+# create data
+
+# set ranges for A, B, C
+
+# set step increment
+```
+
+Systematically search over parameter space from min to mas in increments of the 'step'for each set of parameter values
+
+```{r calcSS}
+
+```
+
+For each calue of the parameters cycle over $i=1$ to $n$ and increment sumSqrs by adding $(Y_{pred,i}-Y_{obs,i})^2$ where $Y_{pred,i}$ is the predicted value of $Y_{i}$ based on the process and model value of $X_i$ 
