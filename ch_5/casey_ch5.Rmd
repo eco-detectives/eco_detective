@@ -1,0 +1,191 @@
+---
+title: 'Eco-Detectives: chapter 5'
+author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float: yes
+    number_sections: true
+    theme: cerulean
+    highlight: haddock
+    includes: 
+      in_header: '~/github/src/templates/ohara_hdr.html'
+  pdf_document:
+    toc: true
+---
+
+``` {r setup, echo = TRUE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
+
+source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
+
+```
+
+$\newcommand{\E}{\mathbb{E}}\newcommand{\Var}{\mathrm{Var}}$
+
+# Chapter 5: The Confrontation: Sum of Squares
+
+First let's set up a process model function based on eqn 5.1: $Y_i = A + BX_i + CX_i^2 + W_i$ where $W_i$ is process uncertainty.  
+
+``` {r process model function}
+
+process_model <- function(x, a = 1, b = 1, c = 1, w = 1) {
+  ### x can be a vector or a single number.
+  ### w is the standard deviation for the process uncertainty (mean = 0)
+  y <- a + b*x + c*x^2 + rnorm(n = length(x), mean = 0, sd = w)
+  return(y)
+}
+
+```
+
+Generate a vector of data based on the process model and plot it; let's also run a linear model on it to see how close it comes on its own.
+
+``` {r set up data}
+a <- 24
+b <- 5
+c <- .6
+w <- 10
+
+x_vec <- seq(0, 10, .1)
+y_vec <- process_model(x_vec, a, b, c, w)
+
+lm_df <- data.frame(x = x_vec, y = y_vec) %>%
+  mutate(x2 = x^2)
+
+ggplot(lm_df, aes(x, y)) +
+  ggtheme_plot() +
+  geom_point()
+
+
+lm_check <- lm(y ~ x + x2, data = lm_df)
+knitr::kable(summary(lm_check) %>% broom::tidy())
+```
+
+Let's set up a vector of values for each of A, B, and C.  Presumably we have a decent guess about the neighborhood of each; otherwise if we end up finding our best value is on the edge of one of these ranges, we can extend the range and run it until the best values are all internal to the vectors.
+
+Let's also set up a function to do the sum of squares for a process model of known form (i.e. $A + BX + CX^2$) for a pair of vectors (x, y)
+
+``` {r sum of squares function}
+
+ssr <- function(x_vec, y_vec, a_est, b_est, c_est) {
+  ### This is pseudocode 5.1 number 3.  Using vectors we don't need to loop
+  ### over all the y and x values; we can just calc the entire vector of
+  ### differences and then add them up.  
+  ### Note: if you give it a vector of a, b, and/or c_ests, it will
+  ### give unexpected results!
+  
+  y_est <- a_est + b_est * t(x_vec) + c_est * t(x_vec^2)
+
+  ssr <- sum( (y_vec - y_est)^2 )
+  
+  return(ssr)
+  
+}
+
+```
+
+## Analyze with for-loop
+
+Using the function, we can do nested loops over each set of estimates.  Time it, including creation of the vectors and array, to compare to data frame method.
+
+``` {r for loop it, results = 'asis'}
+
+ptm <- system.time({
+
+  a_vec <- seq(10, 30, .1)
+  b_vec <- seq(0, 10, .1)
+  c_vec <- seq(0, 1, .01)
+  
+  L_array <- array(data = NA, 
+                   dim = c(length(a_vec), length(b_vec), length(c_vec)))
+
+  for(i in seq_along(a_vec)) { # i <- 1
+    a_est <- a_vec[i]
+    
+    for(j in seq_along(b_vec)) { # j <- 4
+      ### for given value of a_est, loop over all possible b values
+      b_est <- b_vec[j]
+  
+      for(k in seq_along(c_vec)) { # k <- 9
+        ### for given value of a_est and b_est, loop over all possible c values
+        c_est <- c_vec[k]
+  
+        
+        ### For this set of values for a_est, b_est, and c_est, calculate
+        ### the sum of squares and plug it into the array:
+        L_array[i, j, k] <- ssr(x_vec, y_vec, a_est, b_est, c_est)
+        
+      } ### done with c vals for this value of a_est, b_est; exit and increment b_est
+    } ### done with b vals for this value of a_est; exit and increment a_est
+  } ### done deal
+
+  ### Now we just find the location of the minimum value in the entire array, and 
+  ### figure out which values of a_est, b_est, and c_est go with that location.
+  
+  best_fit <- which(L_array == min(L_array), arr.ind = TRUE)
+
+}) ### end of system.time call
+
+cat(sprintf('Elapsed time for array size %s: %s sec\n', length(L_array), round(ptm[3], 3)))
+
+ests <- c(a_vec[best_fit[1]], b_vec[best_fit[2]], c_vec[best_fit[3]])
+
+cat(sprintf('Actual parameter values: a = %s, b = %s, c = %s. \n', 
+            a, b, c))
+cat(sprintf('Estimates: a_est = %s, b_est = %s, c_est = %s. \n', ests[1], ests[2], ests[3]))
+
+cat(sprintf('Estimates from lm(): a_est = %s, b_est = %s, c_est = %s.\n',
+            lm_check$coefficients[1] %>% round(4), 
+            lm_check$coefficients[2] %>% round(4),
+            lm_check$coefficients[3] %>% round(4)))
+
+```
+
+## Analyze with data frame
+
+``` {r data frame it?, results = 'asis'}
+
+ptm <- system.time({
+
+  a_vec <- seq(10, 30, .1)
+  b_vec <- seq(0, 10, .1)
+  c_vec <- seq(0, 1, .01)
+
+  ests_df <- data.frame(a_est = rep(a_vec, times = length(b_vec) * length(c_vec)),
+                     b_est = rep(b_vec, times = length(c_vec), each = length(a_vec)),
+                     c_est = rep(c_vec, each = length(a_vec) * length(b_vec)))
+  
+  ### ssr should only get one value of a, b, c estimates; so use rowwise()
+  ### to evaluate each row individually.  This kinda defeats the whole point
+  ### of vectorization though!
+  L_df <- ests_df %>%
+    rowwise() %>%
+    mutate(ssr = ssr(x_vec, y_vec, a_est, b_est, c_est)) %>%
+    ungroup()
+  
+  best_fit_df <- L_df %>%
+    filter(ssr == min(ssr))
+  
+}) ### end of system.time call
+
+cat(sprintf('Elapsed time for dataframe size %s: %s sec\n', length(L_array), round(ptm[3], 3)))
+
+cat(sprintf('Actual parameter values: a = %s, b = %s, c = %s. \n', 
+            a, b, c))
+
+cat(sprintf('Estimates: a_est = %s, b_est = %s, c_est = %s. \n', 
+            best_fit_df$a_est, best_fit_df$b_est, best_fit_df$c_est))
+
+cat(sprintf('Estimates from lm(): a_est = %s, b_est = %s, c_est = %s.\n',
+            lm_check$coefficients[1] %>% round(4), 
+            lm_check$coefficients[2] %>% round(4),
+            lm_check$coefficients[3] %>% round(4)))
+
+```
+
+__NOTE:__ The dataframe method is way slower here because I had to use `rowwise()` to calculate the ssr for each set of `a_est`, `b_est`, `c_est` - and `rowwise()` basically means it is no longer vectorized.  Maybe this is where `purrr` comes in?
+
