@@ -45,12 +45,17 @@ process_model <- function(x, a = 1, b = 1, c = 1, w = 1) {
 Generate a vector of data based on the process model and plot it; let's also run a linear model on it to see how close it comes on its own.
 
 ``` {r set up data}
-a <- 24
-b <- 5
+a <- 21.2
+b <- 2.9
 c <- .6
 w <- 10
 
-x_vec <- seq(0, 10, .1)
+a_vec <- seq(15, 25, .1)
+b_vec <- seq(0, 5, .05)
+c_vec <- seq(0, 1, .01)
+
+
+x_vec <- seq(0, 20, .05)
 y_vec <- process_model(x_vec, a, b, c, w)
 
 lm_df <- data.frame(x = x_vec, y = y_vec) %>%
@@ -63,15 +68,21 @@ ggplot(lm_df, aes(x, y)) +
 
 lm_check <- lm(y ~ x + x2, data = lm_df)
 knitr::kable(summary(lm_check) %>% broom::tidy())
+
+lm_ests <- data.frame(method = c('actual value', 'lm()'), 
+                      a_est = c(a, lm_check$coefficients[1]),
+                      b_est = c(b, lm_check$coefficients[2]),
+                      c_est = c(c, lm_check$coefficients[3]))
+
 ```
 
 Let's set up a vector of values for each of A, B, and C.  Presumably we have a decent guess about the neighborhood of each; otherwise if we end up finding our best value is on the edge of one of these ranges, we can extend the range and run it until the best values are all internal to the vectors.
 
 Let's also set up a function to do the sum of squares for a process model of known form (i.e. $A + BX + CX^2$) for a pair of vectors (x, y)
 
-``` {r sum of squares function}
+``` {r sum of squared residuals function}
 
-ssr <- function(x_vec, y_vec, a_est, b_est, c_est) {
+ssr_fxn <- function(x_vec, y_vec, a_est, b_est, c_est) {
   ### This is pseudocode 5.1 number 3.  Using vectors we don't need to loop
   ### over all the y and x values; we can just calc the entire vector of
   ### differences and then add them up.  
@@ -96,10 +107,6 @@ Using the function, we can do nested loops over each set of estimates.  Time it,
 
 ptm <- system.time({
 
-  a_vec <- seq(10, 30, .1)
-  b_vec <- seq(0, 10, .1)
-  c_vec <- seq(0, 1, .01)
-  
   L_array <- array(data = NA, 
                    dim = c(length(a_vec), length(b_vec), length(c_vec)))
 
@@ -117,7 +124,7 @@ ptm <- system.time({
         
         ### For this set of values for a_est, b_est, and c_est, calculate
         ### the sum of squares and plug it into the array:
-        L_array[i, j, k] <- ssr(x_vec, y_vec, a_est, b_est, c_est)
+        L_array[i, j, k] <- ssr_fxn(x_vec, y_vec, a_est, b_est, c_est)
         
       } ### done with c vals for this value of a_est, b_est; exit and increment b_est
     } ### done with b vals for this value of a_est; exit and increment a_est
@@ -132,28 +139,20 @@ ptm <- system.time({
 
 cat(sprintf('Elapsed time for array size %s: %s sec\n', length(L_array), round(ptm[3], 3)))
 
-ests <- c(a_vec[best_fit[1]], b_vec[best_fit[2]], c_vec[best_fit[3]])
+loop_ests <- data.frame(method = 'for loop',
+                        a_est = a_vec[best_fit[1]], 
+                        b_est = b_vec[best_fit[2]], 
+                        c_est = c_vec[best_fit[3]])
 
-cat(sprintf('Actual parameter values: a = %s, b = %s, c = %s. \n', 
-            a, b, c))
-cat(sprintf('Estimates: a_est = %s, b_est = %s, c_est = %s. \n', ests[1], ests[2], ests[3]))
-
-cat(sprintf('Estimates from lm(): a_est = %s, b_est = %s, c_est = %s.\n',
-            lm_check$coefficients[1] %>% round(4), 
-            lm_check$coefficients[2] %>% round(4),
-            lm_check$coefficients[3] %>% round(4)))
+knitr::kable(bind_rows(lm_ests, loop_ests))
 
 ```
 
-## Analyze with data frame
+## Analyze with dplyr::mutate
 
-``` {r data frame it?, results = 'asis'}
+``` {r dplyr::mutate?, results = 'asis'}
 
 ptm <- system.time({
-
-  a_vec <- seq(10, 30, .1)
-  b_vec <- seq(0, 10, .1)
-  c_vec <- seq(0, 1, .01)
 
   ests_df <- data.frame(a_est = rep(a_vec, times = length(b_vec) * length(c_vec)),
                      b_est = rep(b_vec, times = length(c_vec), each = length(a_vec)),
@@ -164,7 +163,7 @@ ptm <- system.time({
   ### of vectorization though!
   L_df <- ests_df %>%
     rowwise() %>%
-    mutate(ssr = ssr(x_vec, y_vec, a_est, b_est, c_est)) %>%
+    mutate(ssr = ssr_fxn(x_vec, y_vec, a_est, b_est, c_est)) %>%
     ungroup()
   
   best_fit_df <- L_df %>%
@@ -172,20 +171,118 @@ ptm <- system.time({
   
 }) ### end of system.time call
 
-cat(sprintf('Elapsed time for dataframe size %s: %s sec\n', length(L_array), round(ptm[3], 3)))
+cat(sprintf('Elapsed time for dataframe size %s: %s sec\n', nrow(L_df), round(ptm[3], 3)))
 
-cat(sprintf('Actual parameter values: a = %s, b = %s, c = %s. \n', 
-            a, b, c))
+df_ests   <- data.frame(method = 'dplyr::mutate',
+                        a_est = best_fit_df$a_est,
+                        b_est = best_fit_df$b_est,
+                        c_est = best_fit_df$c_est)
 
-cat(sprintf('Estimates: a_est = %s, b_est = %s, c_est = %s. \n', 
-            best_fit_df$a_est, best_fit_df$b_est, best_fit_df$c_est))
-
-cat(sprintf('Estimates from lm(): a_est = %s, b_est = %s, c_est = %s.\n',
-            lm_check$coefficients[1] %>% round(4), 
-            lm_check$coefficients[2] %>% round(4),
-            lm_check$coefficients[3] %>% round(4)))
+knitr::kable(bind_rows(lm_ests, df_ests))
 
 ```
 
 __NOTE:__ The dataframe method is way slower here because I had to use `rowwise()` to calculate the ssr for each set of `a_est`, `b_est`, `c_est` - and `rowwise()` basically means it is no longer vectorized.  Maybe this is where `purrr` comes in?
+
+## Analyze with `purrr`
+
+``` {r purrr::map?, results = 'asis'}
+
+ptm <- system.time({
+
+  ests_df <- data.frame(a_est = rep(a_vec, times = length(b_vec) * length(c_vec)),
+                     b_est = rep(b_vec, times = length(c_vec), each = length(a_vec)),
+                     c_est = rep(c_vec, each = length(a_vec) * length(b_vec)))
+  
+  L_df <- ests_df %>%
+    mutate(ssr = purrr::pmap_dbl(ests_df, ~ ssr_fxn(x_vec = x_vec, y_vec = y_vec, ..1, ..2, ..3)))
+  
+  best_fit_df <- L_df %>%
+    filter(ssr == min(ssr))
+  
+}) ### end of system.time call
+
+cat(sprintf('Elapsed time for dataframe size %s: %s sec\n', nrow(L_df), round(ptm[3], 3)))
+
+map_ests  <- data.frame(method = 'purrr::map',
+                        a_est = best_fit_df$a_est,
+                        b_est = best_fit_df$b_est,
+                        c_est = best_fit_df$c_est)
+
+knitr::kable(bind_rows(lm_ests, map_ests))
+
+```
+
+`purrr::pmap` seems faster than `rowwise()` but still slower than a nested loop...
+
+
+## Analyze with `apply`
+
+``` {r base::apply?, results = 'asis'}
+
+ptm <- system.time({
+
+  ests_mat <- matrix(c(rep(a_vec, times = length(b_vec) * length(c_vec)),
+                       rep(b_vec, times = length(c_vec), each = length(a_vec)),
+                       rep(c_vec, each = length(a_vec) * length(b_vec))),
+                     ncol = 3)
+  
+  ssr <- apply(ests_mat, MARGIN = 1, FUN = function(x) {
+        ssr_fxn(x_vec = x_vec, y_vec = y_vec, x[1], x[2], x[3])
+      })
+  
+  best_fit_vec <- ests_mat[which(ssr == min(ssr)), ]
+  
+}) ### end of system.time call
+
+cat(sprintf('Elapsed time for matrix size %s: %s sec\n', length(ests_mat), round(ptm[3], 3)))
+
+apply_ests <- data.frame(method = 'base::apply',
+                         a_est = best_fit_vec[1],
+                         b_est = best_fit_vec[2],
+                         c_est = best_fit_vec[3])
+
+knitr::kable(bind_rows(lm_ests, apply_ests))
+
+```
+
+
+`apply` should probably be faster than `purrr::map` but apparently not?  anyway, in this particular instance, the nested for loops seem to be the winner!
+
+## With matrices
+
+We can also get fancy and use some matrix magic:
+
+$$\widehat{\mathbf{\beta}} = (\mathbf{X'X})^{-1}\mathbf{X'y}$$
+
+where $\mathbf X$ is a matrix with columns for each parameter, including a column of 1s for the intercept.
+
+``` {r calc with matrices, results = 'asis'}
+
+ptm <- system.time({
+  X_mat <- data.frame(intcpt = 1,
+                      x      = x_vec,
+                      x_sq   = x_vec^2) %>%
+    as.matrix() ### seems more straightforward to set it up this way...
+  
+  Xt_X <- t(X_mat) %*% X_mat
+  Xt_y <- t(X_mat) %*% y_vec
+  
+  beta_hat <- solve(Xt_X) %*% Xt_y
+
+}) ### end of system.time call
+
+cat(sprintf('Elapsed time for matrix size %s: %s sec\n', length(X_mat), round(ptm[3], 3)))
+
+matrix_ests <- data.frame(method = 'matrix math',
+                          a_est = beta_hat[1],
+                          b_est = beta_hat[2],
+                          c_est = beta_hat[3])
+
+knitr::kable(bind_rows(lm_ests, matrix_ests))
+
+
+```
+
+
 
