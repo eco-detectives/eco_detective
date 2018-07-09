@@ -1,0 +1,51 @@
+---
+title: "Ch5_STL"
+author: "Seba Tapia"
+date: "7/9/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Chapter 5
+
+#Pseudocode 5.1
+```{r Pseudocode 5.1}
+
+#Step one. Input data, range of parameter va;ies and increment size
+
+Chap5Data <- data.frame(x=c(1,2,3,4,5,6,7,8,9,10), Yobs=c(1.75, 3, 4.75, 7, 9.75, 13, 16.75, 21, 25.75, 31))
+
+#Set minimum and maximum estimated values of the parameters
+Aseq <- seq(from= 0.5, to=1.2, length.out = 50) #Values for A from 0.5 to 1.2 by whatever increments that leads to 50 numbers
+Bseq <- seq(from=0.1, to=0.8, length.out = 50) #same for B, from 0.1 to 0.8
+Cseq <- seq(from=0.1, to=0.3, length.out = 50) #same for C, from 0.1 to 0.3
+
+InitialParameters <- data.frame(Aseq, Bseq, Cseq)
+
+#Step two. Loop over every value of A, B and C and store SS for each observation as 0
+
+SSAVec <- vector(length=length(Aseq)) #Create empty vectors to store Sum of squeares for changing values in each parameter
+SSBVec <- vector(length =length(Bseq))
+SSCVec <- vector(length =length(Cseq))
+
+for (i in Aseq) {
+  SSAVec[i] <- 0
+  SSBVec[i] <- 0
+  SSCVec[i] <- 0
+}
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
