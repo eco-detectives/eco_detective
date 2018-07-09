@@ -42,8 +42,8 @@ for (i in Aseq) {
   SSCVec[i] <- 0
 }
 
-SSLoopDF <- data.frame(x= rep(Chap5Data$x, each=length(Aseq)), Yobs= rep(Chap5Data$Yobs, each=length(Aseq)), A= rep(Aseq, times=length(Chap5Data$x)), B=rep(Bseq, times=length(Chap5Data$x)), C=rep(Cseq, times=length(Chap5Data$x))) #create dataframe where each value for each parameter interacts with every X %>%
-  mutate(YpredA=A+FixedB*x+FixedC*(x^2), ResA=((Yobs-YpredA)^2),YpredB=FixedA+B*x+FixedC*(x^2), ResB=((Yobs-YpredB)^2), YpredC=FixedA+FixedB*x+C*(x^2), ResC= ((Yobs-YpredC)^2)) #create predicted values over one changing parameter while keeping others constant, and calculates the residuals for each observation %>%
+SSLoopDF <- data.frame(x= rep(Chap5Data$x, each=length(Aseq)), Yobs= rep(Chap5Data$Yobs, each=length(Aseq)), A= rep(Aseq, times=length(Chap5Data$x)), B=rep(Bseq, times=length(Chap5Data$x)), C=rep(Cseq, times=length(Chap5Data$x))) %>% #create dataframe where each value for each parameter interacts with every X 
+  mutate(YpredA=A+FixedB*x+FixedC*(x^2), ResA=((Yobs-YpredA)^2),YpredB=FixedA+B*x+FixedC*(x^2), ResB=((Yobs-YpredB)^2), YpredC=FixedA+FixedB*x+C*(x^2), ResC= ((Yobs-YpredC)^2)) %>% #create predicted values over one changing parameter while keeping others constant, and calculates the residuals for each observation 
   group_by(A) %>% #For each parameter value, get the sum of squares from x=1  to x=10
   mutate(SSA = sum(ResA)) %>%
   ungroup() %>%
@@ -58,18 +58,30 @@ BestA <- SSLoopDF$A[which.min(SSLoopDF$SSA)] #Find the value for each parameter 
 BestB <- SSLoopDF$B[which.min(SSLoopDF$SSB)]
 BestC <- SSLoopDF$C[which.min(SSLoopDF$SSC)]
 
-
-
-
-
+BestA
+BestB
+BestC
 ```
 
-## Including Plots
+#Pseudocode 5.2
 
-You can also embed plots, for example:
+```{r Pseudocode 5.2}
+set.seed(1)
+A <- BestA
+B <- BestB
+C <- BestC
+X <- seq(1,100,1)
+N <- 100
+W <- runif(n=1, min=-3,max=3)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+Ypredic <- vector(length=length(X))
+
+for(i in 1:length(X)){
+  w <- runif(n=1, min=-3, max=3)
+  Ypredic[i] <- A+(B*X[i])+(C*((X[i])^2)) + w
+}
+
+Ypredic
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
