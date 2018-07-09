@@ -72,13 +72,13 @@ B <- BestB
 C <- BestC
 X <- seq(1,100,1)
 N <- 100
-W <- runif(n=1, min=-3,max=3)
+w <- vector(length=length(X))
 
 Ypredic <- vector(length=length(X))
 
 for(i in 1:length(X)){
-  w <- runif(n=1, min=-3, max=3)
-  Ypredic[i] <- A+(B*X[i])+(C*((X[i])^2)) + w
+  w[i] <- runif(n=1, min=-3, max=3)
+  Ypredic[i] <- A+(B*X[i])+(C*((X[i])^2)) + w[i]
 }
 
 Ypredic
