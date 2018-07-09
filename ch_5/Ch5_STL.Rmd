@@ -7,6 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
 ```
 
 #Chapter 5
@@ -22,6 +23,9 @@ Chap5Data <- data.frame(x=c(1,2,3,4,5,6,7,8,9,10), Yobs=c(1.75, 3, 4.75, 7, 9.75
 Aseq <- seq(from= 0.5, to=1.2, length.out = 50) #Values for A from 0.5 to 1.2 by whatever increments that leads to 50 numbers
 Bseq <- seq(from=0.1, to=0.8, length.out = 50) #same for B, from 0.1 to 0.8
 Cseq <- seq(from=0.1, to=0.3, length.out = 50) #same for C, from 0.1 to 0.3
+FixedA <- 1 #create fixed values for each parameter to keep constant while optimizing another
+FixedB <- 0.5
+FixedC <- 0.25
 
 InitialParameters <- data.frame(Aseq, Bseq, Cseq)
 
@@ -31,11 +35,31 @@ SSAVec <- vector(length=length(Aseq)) #Create empty vectors to store Sum of sque
 SSBVec <- vector(length =length(Bseq))
 SSCVec <- vector(length =length(Cseq))
 
+
 for (i in Aseq) {
   SSAVec[i] <- 0
   SSBVec[i] <- 0
   SSCVec[i] <- 0
 }
+
+SSLoopDF <- data.frame(x= rep(Chap5Data$x, each=length(Aseq)), Yobs= rep(Chap5Data$Yobs, each=length(Aseq)), A= rep(Aseq, times=length(Chap5Data$x)), B=rep(Bseq, times=length(Chap5Data$x)), C=rep(Cseq, times=length(Chap5Data$x))) #create dataframe where each value for each parameter interacts with every X %>%
+  mutate(YpredA=A+FixedB*x+FixedC*(x^2), ResA=((Yobs-YpredA)^2),YpredB=FixedA+B*x+FixedC*(x^2), ResB=((Yobs-YpredB)^2), YpredC=FixedA+FixedB*x+C*(x^2), ResC= ((Yobs-YpredC)^2)) #create predicted values over one changing parameter while keeping others constant, and calculates the residuals for each observation %>%
+  group_by(A) %>% #For each parameter value, get the sum of squares from x=1  to x=10
+  mutate(SSA = sum(ResA)) %>%
+  ungroup() %>%
+  group_by(B) %>%
+  mutate(SSB=sum(ResB)) %>%
+  ungroup %>%
+  group_by(C) %>% 
+  mutate(SSC = sum(ResC)) %>%
+  ungroup()
+
+BestA <- SSLoopDF$A[which.min(SSLoopDF$SSA)] #Find the value for each parameter that minimizes SS
+BestB <- SSLoopDF$B[which.min(SSLoopDF$SSB)]
+BestC <- SSLoopDF$C[which.min(SSLoopDF$SSC)]
+
+
+
 
 
 ```
