@@ -58,19 +58,17 @@ Cvec=seq(Cmin,Cmax,by=stpC)
 srchAry<-array(data=NA, dim=c(length(Avec),length(Bvec),length(Cvec)))
 
 
-for(l in Cvec){
-  cIn<-Cvec[l]
-  for(k in Bvec){
-    bIn<-Bvec[k]
+for(k in Cvec){
+  cIn<-Cvec[k]
+  for(j in Bvec){
+    bIn<-Bvec[j]
     for(i in Avec){
       aIn<-Avec[i]
       
-      for(i in 1:nrow(dat)){
-        srchAry[j,k,l]<-dat %>%
+        srchAry[i,j,k]<-dat %>%
           mutate(yPred=modFunc(x,aIn,bIn,cIn))%>%
           mutate(ssqi=(y-yPred)^2)%>%
           summarise(ssq=sum(ssqi))
-        }
     }
   }
 }
