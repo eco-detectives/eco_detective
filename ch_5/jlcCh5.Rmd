@@ -17,15 +17,66 @@ Input the data, the range of parameter values adn the size increment used for cy
 ```{r createData}
 # create data
 
+realA=11.2
+realB=3.1
+realC=1.89
+
+modFunc<-function(x,A=1,B=1,C=1){
+  yPrd = A + B*x + C*x^2
+  return(yPrd)
+} #function to run the model (excludes process error, no w)
+
+dat<-data.frame(x=seq(1,50,by=2))%>%
+  mutate(y=modFunc(x,A=realA,B=realB,C=realC)+runif(1,min = -5,max = 5)) # create "observed Y" by running the model with "real" values and adding in random values for w
+
 # set ranges for A, B, C
 
+Amin=5
+Amax=15
+
+Bmin=0
+Bmax=5
+
+Cmin=0
+Cmax=3
+
 # set step increment
+stpA=0.25
+stpB=0.05
+stpC=0.01
+
 ```
 
 Systematically search over parameter space from min to mas in increments of the 'step'for each set of parameter values
 
 ```{r calcSS}
 
+Avec=seq(Amin,Amax,by=stpA)
+Bvec=seq(Bmin,Bmax,by=stpB)
+Cvec=seq(Cmin,Cmax,by=stpC)
+
+srchAry<-array(data=NA, dim=c(length(Avec),length(Bvec),length(Cvec)))
+
+
+for(l in Cvec){
+  cIn<-Cvec[l]
+  for(k in Bvec){
+    bIn<-Bvec[k]
+    for(i in Avec){
+      aIn<-Avec[i]
+      
+      for(i in 1:nrow(dat)){
+        srchAry[j,k,l]<-dat %>%
+          mutate(yPred=modFunc(x,aIn,bIn,cIn))%>%
+          mutate(ssqi=(y-yPred)^2)%>%
+          summarise(ssq=sum(ssqi))
+        }
+    }
+  }
+}
+
+
+
 ```
 
-For each calue of the parameters cycle over $i=1$ to $n$ and increment sumSqrs by adding $(Y_{pred,i}-Y_{obs,i})^2$ where $Y_{pred,i}$ is the predicted value of $Y_{i}$ based on the process and model value of $X_i$ 
+For each value of the parameters cycle over $i=1$ to $n$ and increment sumSqrs by adding $(Y_{pred,i}-Y_{obs,i})^2$ where $Y_{pred,i}$ is the predicted value of $Y_{i}$ based on the process and model value of $X_i$ 
