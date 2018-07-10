@@ -95,18 +95,17 @@ X <- seq(1,100,1)
 N <- 100
 w <- vector(length=length(X))
 
-Ypredic    <- vector(length=length(X))
+YpredicDet    <- vector(length=length(X))
 YpredicUnc <- vector(length=length(X))
 
 for(i in 1:length(X)){
   w[i] <- runif(n=1, min=-3, max=3) #get random number from the process uncertainty distribution for each observation (same than doing w <- runif(n=length(X), min=-3, max=3))
   YpredicUnc[i] <- A+(B*X[i])+(C*((X[i])^2)) + w[i] #predict y based on x and process ncertainty
-  Ypredic[i]<- A+(B*X[i])+(C*((X[i])^2))
+  YpredicDet[i]<- A+(B*X[i])+(C*((X[i])^2))
 }
 
-UncertainPredictions <- data.frame(Ypredic, YpredicUnc) %>%
-  gather(key="model", value="predY") %>%
-  mutate(X= rep(X, length.out=nrow(UncertainPredictions)))
+UncertainPredictions <- data.frame(X, YpredicDet, YpredicUnc) %>%
+  gather(key="model", value="predY", -X) 
 
 ggplot(UncertainPredictions, aes(x=X, y= predY)) +
  geom_line(aes(color=model)) +
