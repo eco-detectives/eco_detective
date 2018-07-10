@@ -133,6 +133,8 @@ $(document).ready(function () {
 </div>
 <div id="pseudocode-5.1" class="section level1">
 <h1>Pseudocode 5.1</h1>
+<div id="finding-the-lowest-ss-for-each-parameter-separately-keeping-all-others-constant" class="section level2">
+<h2>Finding the lowest SS for each parameter separately (keeping all others constant)</h2>
 <pre class="r"><code>#Step one. Input data, range of parameter va;ies and increment size
 
 Chap5Data &lt;- data.frame(x=c(1,2,3,4,5,6,7,8,9,10), Yobs=c(1.75, 3, 4.75, 7, 9.75, 13, 16.75, 21, 25.75, 31))
@@ -183,6 +185,27 @@ BestA</code></pre>
 <pre class="r"><code>BestC</code></pre>
 <pre><code>## [1] 0.2510204</code></pre>
 </div>
+<div id="now-working-with-every-parameter-at-once-every-possible-interaction" class="section level2">
+<h2>Now, working with every parameter at once (every possible interaction)</h2>
+<pre class="r"><code>InteractAllTheThings &lt;- expand.grid(A=Aseq, B=Bseq, C=Cseq)
+SSAllInter &lt;- data.frame(x= rep(Chap5Data$x, each=nrow(InteractAllTheThings)), Yobs= rep(Chap5Data$Yobs, each=nrow(InteractAllTheThings)), A=InteractAllTheThings$A, B=InteractAllTheThings$B, C=InteractAllTheThings$C) %&gt;%
+  mutate(Ypred=A+B*x+C*(x^2), Res=((Yobs-Ypred)^2)) %&gt;%
+  group_by(A,B,C) %&gt;%
+  mutate(SS= sum(Res)) %&gt;%
+  ungroup()
+
+BestA.int &lt;- SSAllInter$A[which.min(SSAllInter$SS)]
+BestB.int &lt;- SSAllInter$B[which.min(SSAllInter$SS)]
+BestC.int &lt;- SSAllInter$C[which.min(SSAllInter$SS)]
+
+BestA.int</code></pre>
+<pre><code>## [1] 1.042857</code></pre>
+<pre class="r"><code>BestB.int</code></pre>
+<pre><code>## [1] 0.4857143</code></pre>
+<pre class="r"><code>BestC.int</code></pre>
+<pre><code>## [1] 0.2510204</code></pre>
+</div>
+</div>
 <div id="pseudocode-5.2" class="section level1">
 <h1>Pseudocode 5.2</h1>
 <pre class="r"><code>set.seed(1)
@@ -196,8 +219,8 @@ w &lt;- vector(length=length(X))
 Ypredic &lt;- vector(length=length(X))
 
 for(i in 1:length(X)){
-  w[i] &lt;- runif(n=1, min=-3, max=3)
-  Ypredic[i] &lt;- A+(B*X[i])+(C*((X[i])^2)) + w[i]
+  w[i] &lt;- runif(n=1, min=-3, max=3) #get random number from the process uncertainty distribution for each observation (same than doing w &lt;- runif(n=length(X), min=-3, max=3))
+  Ypredic[i] &lt;- A+(B*X[i])+(C*((X[i])^2)) + w[i] #predict y based on x and process ncertainty
 }
 
 Ypredic</code></pre>
