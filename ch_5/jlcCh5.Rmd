@@ -91,6 +91,17 @@ ssq<-srchAry[minSSQ]
 ssq
 ```
 
+### R-friendly way
+
+```{r rFrnd5.1}
+mod1<-lm(dat$yObs~poly(dat$xVals,degree=2,raw=T))
+
+summary(mod1)
+```
+
+
+***
+
 ## Pseudocode 5.2: Regression model
 
 Specify values of the parameters A, B, and C, the number of data points to be generated, and the distribution of the process uncertainty. Set $i=1$.  
