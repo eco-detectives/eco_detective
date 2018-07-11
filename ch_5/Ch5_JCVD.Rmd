@@ -1,0 +1,247 @@
+---
+title: 'Chapter 5 '
+subtitle: "The confrontation: Sum of Squares"
+author: "`r Sys.info()['user']`"
+date: "`r date()`"
+output: 
+  html_document:
+    code_folding: hide
+    fig_caption: yes
+    toc: yes
+    toc_float: yes
+---
+
+# The system
+
+We start by assuming a process model (the signal) of the form:
+
+$$
+Y_i = A + BX_i + CX_i^2 + W_i
+$$
+
+Where $W_i$ represents the process ucnertainty, while $A$, $B$, and $C$ are parameters. Our objective is to esitimate these parameters, which we denote $A_{est}$, $B_{est}$, and $C_{est}$, such that $T_{pre,i} = A_{est} + B_{est}X_i + C_{est}X_i^2$
+
+## Pseudocode 5.2
+
+I will create a function for our process equation:
+
+```{r}
+process <- function(x = c(1:50), A = 10, B = 20, C = 30, sd = 0){
+  y <- A + B*x + C*x^2 + rnorm(n = length(x), mean = 0, sd = sd)
+  return(y)
+}
+```
+
+## Visualize the process and associated error
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+})
+```
+
+```{r}
+#Define a vector of X
+x <- seq(from = 1, to = 50, by = 0.1)
+
+# Define known parameters
+A <- 10
+B <- 5
+C <- 1
+sd <- mean(process(x = x, A = A, B = B, C = C)) / 10
+
+set.seed(43)
+
+tibble(x) %>% 
+  mutate(y = process(x = x, A = A, B = B, C = C, sd = sd)) %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point(color = "steelblue") +
+  geom_smooth(method = "lm", formula = y~I(x^2), color = "black") +
+  theme_bw()
+```
+
+# Sum of squares
+
+The sum of squares is defined as:
+
+$$
+\sum_{i = 1}^n(Y_{pre,i} - Y{obs, i})^2
+$$
+
+Which can be rewritten as a function of $A_{est}$, $B_{est}$, and $C_{est}$ as:
+
+$$
+\gamma(A_{est}, B_{est}, C_{est}) = \sum_{i = 1}^n(A_{est} + B_{est}X_i + C_{est}X_i^2 - Y{obs, i})^2
+$$
+
+The goal is to obtain the best combination of $A_{est}$, $B_{est}$, and $C_{est}$ to minimize $\gamma(A_{est}, B_{est}, C_{est})$. The minimum of the equation above is given found where the three partial derivatives = 0. The partial derivatives are:
+
+$$
+\begin{split}
+\frac{\partial\gamma}{\partial A_{est}} = \sum_{i = 1}^n 2(A_{est} + B_{est}X_i + C_{est}X_i^2 - Y{obs, i})\\
+\frac{\partial\gamma}{\partial B_{est}} = \sum_{i = 1}^n 2X_i(A_{est} + B_{est}X_i + C_{est}X_i^2 - Y{obs, i})\\
+\frac{\partial\gamma}{\partial C_{est}} = \sum_{i = 1}^n 2X_i^2(A_{est} + B_{est}X_i + C_{est}X_i^2 - Y{obs, i})
+\end{split}
+$$
+
+We can either solve these system of linear equations, or search for all possible parameters until we reach the optimum values.
+
+## Function to calculate SS
+
+Now let's create a function that calculates the sum of squares given two inputs (observed and predicted):
+
+```{r}
+sum_squares <- function(pred = NULL, obs = NULL){
+  stopifnot(exprs = {
+    !is.null(pred)
+    !is.null(obs)
+  })
+  sum((pred-obs)^2)
+}
+```
+
+# Obtain parameters
+
+## Pseudocode 5.1
+
+(modified to use `for` loop instead of `while` or `until` control sequences)
+
+I know what the true parameters are (see above), so I can try and estimate these parameters by searching the parameter space in a very inefficient way with for loops. I wil create a function for that:
+
+```{r}
+get_params <- function(x, y_obs, min = c(0, 0, 0), max = c(50, 10, 5), steps = NULL, prec = 10, verbose = T){
+  Amin <- min[1]
+  Amax <- max[1]
+  Bmin <- min[2]
+  Bmax <- max[2]
+  Cmin <- min[3]
+  Cmax <- max[3]
+  
+  stepsA <- (Amax - Amin) / prec
+  stepsB <- (Bmax - Bmin) / prec
+  stepsC <- (Cmax - Cmin) / prec
+  
+  As <- seq(Amin, Amax, by = stepsA)
+  Bs <- seq(Bmin, Bmax, by = stepsB)
+  Cs <- seq(Cmin, Cmax, by = stepsC)
+  
+  gamma <- array(data = NA,
+                 dim = c(length(As),
+                         length(Bs),
+                         length(Cs)))
+
+  for(a in 1:length(As)){
+    A_est <- As[a]
+    for(b in 1:length(Bs)){
+      B_est <- Bs[b]
+      for(c in 1:length(Cs)){
+        C_est <- Cs[c]
+        y_pred <- process(x = x, A = A_est, B = B_est, C = C_est, sd = 0)
+        gamma[a, b, c] <- sum_squares(pred = y_pred, obs = y_obs)
+        
+      }
+    }
+  }
+    best_fit <- which(gamma == min(gamma), arr.ind = TRUE)
+    
+    params <- c(As[best_fit[1]],
+                Bs[best_fit[2]],
+                Cs[best_fit[3]])
+    
+    if(verbose){print(paste0("Minimum SS = ",min(gamma),
+                            "with parameters: A = ", params[1],
+                            ", B =", params[2],
+                            ", and C = ", params[3]))}
+    
+    return(params)
+}
+```
+
+I can now use the three functions defined above to obtain the parameters that minimize the sum of squares, given a precision that I am willing to use. Remember there is a tradeoff between precission and computation time.
+
+```{r}
+set.seed(43)
+y_obs <- process(x = x, A = A, B = B, C = C, sd = sd)
+
+start1 <- Sys.time()
+
+params <- get_params(x = x, y_obs = y_obs, min = c(5, 2, 0), max = c(15, 7, 2), prec = 50)
+
+end1 <- Sys.time()
+```
+
+Let's plot the fit
+
+```{r, fig.cap = "Best fit obtained by iterating over a set of A, B, and C values where I know a parameter space (sort of like a prior). Blue dots represent observations, black line represents the original signal, and red line represents the fit obtained here."}
+tibble(x, y_obs) %>% 
+  mutate(y_pred = process(x = x, A = params[1], B = params[2], C = params[3], sd = 0)) %>% 
+  ggplot() +
+  geom_point(aes(x = x, y = y_obs), color = "steelblue") +
+  geom_line(aes(x = x, y = y_pred), color = "red", size = 1) +
+  geom_smooth(aes(x = x, y = y_obs), method = "lm", formula = y~I(x^2), color = "black") +
+  theme_bw()
+```
+
+## `tidy` approach
+
+I used a `for` loop before, which is not very efficient. Let's see if I can do better witha tidy approach:
+
+```{r}
+# I create vectors similar to the ones created within get_params()
+As <- seq(5, 15, by = 0.2)
+Bs <- seq(2, 7, by = 0.1)
+Cs <- seq(0, 2, by = 0.04)
+
+start2 <- Sys.time()
+results <- expand.grid(As, Bs, Cs) %>% 
+  magrittr::set_colnames(value = LETTERS[1:3]) %>% 
+  mutate(x = list(x),
+         obs = list(y_obs),
+         pred = pmap(.l = list(x = x, A = A, B = B, C = C), .f = process),
+         ss = pmap_dbl(.l = list(pred = pred, obs = obs), .f = sum_squares)) %>% 
+  select(A, B, C, ss) %>% 
+  filter(ss == min(ss))
+end2 <- Sys.time()
+
+results
+```
+
+This approach uses much less code, and it's a bit more self-evident (I think). It's about as slow for now, but when scaling up by increasing the precision it is faster `r end1-start1`, `r end2-start2`.
+
+# `lm` approach
+
+Finally, the logical approach is to just fit the model with `lm`:
+
+```{r, results = "asis"}
+model <- lm(y_obs ~ x + I(x^2))
+
+stargazer::stargazer(model, type = "html", intercept.bottom = F, single.row = T)
+```
+ 
+```{r}
+tibble(x, y_obs) %>% 
+  mutate(for_loop = process(x = x, A = params[1], B = params[2], C = params[3], sd = 0),
+         tidy = process(x = x, A = results$A, B = results$B, C = results$C, sd = 0),
+         lm = predict(model)) %>% 
+  gather(method, value, -c(x, y_obs)) %>% 
+  ggplot() +
+  geom_point(aes(x = x, y = y_obs), color = "steelblue") +
+  geom_line(aes(x = x, y = value, color = method), size = 1) +
+  theme_bw()
+```
+
+We can also check the fitted vs predicted plots
+
+```{r}
+tibble(x, y_obs) %>% 
+  mutate(for_loop = process(x = x, A = params[1], B = params[2], C = params[3], sd = 0),
+         tidy = process(x = x, A = results$A, B = results$B, C = results$C, sd = 0),
+         lm = predict(model)) %>% 
+  gather(method, y_pred, -c(x, y_obs)) %>% 
+  ggplot() +
+  geom_point(aes(x = y_pred, y = y_obs), color = "steelblue") +
+  facet_wrap(~method, ncol = 2) +
+  geom_abline(slope = 1) +
+  theme_bw()
+```
+
