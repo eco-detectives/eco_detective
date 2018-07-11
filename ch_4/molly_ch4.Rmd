@@ -1,24 +1,21 @@
 ---
-title: "Chapter 3"
+title: "Chapter 4: Incidental catch in fisheries - seabirds in the New Zealand squid trawl fishery"
 author: "Molly Wilson"
 date: "6/22/2018"
 output:
   html_document:
-    toc: true
-    toc_float: true
+    toc: false
     theme: united
     number_sections: false
 ---
 
-```{r, echo=FALSE, warning=FALSE}
+```{r, echo=FALSE, message=FALSE}
 library(dplyr)
 library(ggplot2)
 library(reshape)
 
 data_freq <-read.csv("../ch_4/data/table_4_3.csv")
 ```
-
-# Chapter 4: Incidental catch in fisheries - seabirds in the New Zealand squid trawl fishery
 
 In this chapter we are trying to determine the minimum number of onboard observers needed to give an accurate representation of bycatch data based on different amounts of process and observation uncertainty.
 
@@ -35,7 +32,7 @@ data_raw <- data_freq[rep(1:nrow(data_freq), data_freq[["frequency"]]), ] # expa
 
 m_data <- mean(data_raw$bycatch) 
 var <- var(data_raw$bycatch) 
-k_data <- m^2/(var-m) # calculate k (matches 0.06 given in text)
+k_data <- m_data^2/(var-m_data) # calculate k (matches 0.06 given in text)
 N_tow <- 1000
 N_sim <- 150
 d <- 0.25 # why can we just make this up, and not use equation given...? In text they set to 0.25
