@@ -17,15 +17,186 @@ Input the data, the range of parameter values adn the size increment used for cy
 ```{r createData}
 # create data
 
+realA=11.2
+realB=3.1
+realC=1.89
+
+modFunc<-function(x,A=1,B=1,C=1){
+  yPrd = A + B*x + C*x^2
+  return(yPrd)
+} #function to run the model (excludes process error, no w)
+
+dat<-data.frame(xVals=seq(1,50,by=2))%>%
+  mutate(yObs=modFunc(xVals,A=realA,B=realB,C=realC)+runif(1,min = -5,max = 5)) # create "observed Y" by running the model with "real" values and adding in random values for w
+
 # set ranges for A, B, C
 
+Amin=5
+Amax=15
+
+Bmin=0
+Bmax=5
+
+Cmin=0
+Cmax=3
+
 # set step increment
+stpA=0.25
+stpB=0.5
+stpC=0.1
+
 ```
 
 Systematically search over parameter space from min to mas in increments of the 'step'for each set of parameter values
 
 ```{r calcSS}
 
+Avec=seq(Amin,Amax,by=stpA)
+Bvec=seq(Bmin,Bmax,by=stpB)
+Cvec=seq(Cmin,Cmax,by=stpC)
+
+# Avec=seq(1,5,by=1)
+# Bvec=seq(1,10,by=2)
+# Cvec=seq(1,2,by=0.1)
+
+srchAry<-array(data=0, dim=c(length(Avec),
+                              length(Bvec),
+                              length(Cvec)))
+
+
+for(k in 1:length(Cvec)){
+  cIn<-Cvec[k]
+  for(j in 1:length(Bvec)){
+    bIn<-Bvec[j]
+    for(i in 1:length(Avec)){
+      aIn<-Avec[i]
+      # print(c(aIn,bIn,cIn))
+      # print(c(i,j,k))
+        iDat<-dat %>%
+          mutate(yPred=sapply(dat$xVals,function(x) modFunc(x,aIn,bIn,cIn)))%>%
+          mutate(ssqi=(yPred-yObs)^2)#%>%
+         
+        srchAry[i,j,k]<-sum(iDat$ssqi)
+    }
+  }
+}
+
+minSSQ<-which(srchAry==min(srchAry),arr.ind = T)
+Aest<-Avec[minSSQ[1]]
+Best<-Bvec[minSSQ[2]]
+Cest<-Cvec[minSSQ[3]]
+print(c(Aest,Best,Cest))
+
+ssq<-srchAry[minSSQ]
+ssq
 ```
 
-For each calue of the parameters cycle over $i=1$ to $n$ and increment sumSqrs by adding $(Y_{pred,i}-Y_{obs,i})^2$ where $Y_{pred,i}$ is the predicted value of $Y_{i}$ based on the process and model value of $X_i$ 
+### R-friendly way
+
+```{r rFrnd5.1}
+mod1<-lm(dat$yObs~poly(dat$xVals,degree=2,raw=T))
+
+summary(mod1)
+```
+
+
+***
+
+## Pseudocode 5.2: Regression model
+
+Specify values of the parameters A, B, and C, the number of data points to be generated, and the distribution of the process uncertainty. Set $i=1$.  
+
+Choose $X_i$
+
+```{r paramsSetup}
+A=1#12
+B=0.5#3
+C=0.25#0.5
+
+n=10#20
+
+Wi=runif(n=n,min = -3,max = 3)
+
+i=1
+
+xi<-c(1:10)
+
+```
+
+Calculate $Y_i$
+
+```{r Yi}
+regress<-data.frame(xi=xi,
+                    uncert=Wi) %>%
+  mutate(yEst=A+B*xi+C*xi^2) %>%
+  mutate(yRes=A+B*xi+C*xi^2+Wi)
+
+plot(regress$xi,regress$yRes)
+lines(regress$xi,regress$yEst)
+
+regress
+
+```
+
+Estimate the coefficients using PC5.1
+
+```{r calcSS5.2}
+
+Av=seq(0,2,by=0.2)
+Bv=seq(0,2,by=0.1)
+Cv=seq(0,2,by=0.1)
+
+# Avec=seq(1,5,by=1)
+# Bvec=seq(1,10,by=2)
+# Cvec=seq(1,2,by=0.1)
+
+srchAry2<-array(data=0, dim=c(length(Av),
+                              length(Bv),
+                              length(Cv)))
+
+
+for(k in 1:length(Cv)){
+  cIn2<-Cv[k]
+  for(j in 1:length(Bv)){
+    bIn2<-Bv[j]
+    for(i in 1:length(Av)){
+      aIn2<-Av[i]
+      # print(c(aIn,bIn,cIn))
+      # print(c(i,j,k))
+        iDat2<-regress %>%
+          mutate(yPred=sapply(regress$xi,function(x) modFunc(x,aIn2,bIn2,cIn2)))%>%
+          mutate(ssqi=(yPred-yRes)^2)#%>%
+         
+        srchAry2[i,j,k]<-sum(iDat2$ssqi)
+    }
+  }
+}
+
+minSSQ<-which(srchAry2==min(srchAry2),arr.ind = T)
+Aest2<-Av[minSSQ[1]]
+Best2<-Bv[minSSQ[2]]
+Cest2<-Cv[minSSQ[3]]
+print(c(Aest2,Best2,Cest2))
+
+ssq2<-srchAry2[minSSQ]
+ssq2
+```
+
+ Add predicted values column, calculated using the estimated coefficients to see how far off we are
+
+```{r calcPred}
+regress2<-regress%>%
+  mutate(yPred=Aest2 + Best2*xi + Cest2*xi^2)
+
+plot(regress2$xi,regress2$yRes,xlab="X",ylab="Y")
+lines(regress2$xi,regress2$yPred,col="red")
+
+regress
+
+```
+
+## Goodness of fit
+
+The first goodness of fit profile in Equation 5.5 leads to the function for optimal values for B*(A) and C\*(A) as A varies
+
+...did anyone try this?

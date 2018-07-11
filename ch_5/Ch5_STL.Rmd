@@ -8,11 +8,14 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
+library(ggplot2)
+library(tidyr)
 ```
 
 #Chapter 5
 
 #Pseudocode 5.1
+##Finding the lowest SS for each parameter separately (keeping all others constant)
 ```{r Pseudocode 5.1}
 
 #Step one. Input data, range of parameter va;ies and increment size
@@ -63,7 +66,25 @@ BestB
 BestC
 ```
 
-#Pseudocode 5.2
+##Now, working with every parameter at once (every possible interaction)
+```{r pseudocode 5.1 interacting parameters}
+InteractAllTheThings <- expand.grid(A=Aseq, B=Bseq, C=Cseq)
+SSAllInter <- data.frame(x= rep(Chap5Data$x, each=nrow(InteractAllTheThings)), Yobs= rep(Chap5Data$Yobs, each=nrow(InteractAllTheThings)), A=InteractAllTheThings$A, B=InteractAllTheThings$B, C=InteractAllTheThings$C) %>% #create dataframe with every x and observed y crossed with every possible interaction of A*B*C
+  mutate(Ypred=A+B*x+C*(x^2), Res=((Yobs-Ypred)^2)) %>% #get the predicted Y
+  group_by(A,B,C) %>% #Group by A, then B, then C to get SS for x=1 to x=10 for every possible combination
+  mutate(SS= sum(Res)) %>%
+  ungroup()
+
+BestA.int <- SSAllInter$A[which.min(SSAllInter$SS)] 
+BestB.int <- SSAllInter$B[which.min(SSAllInter$SS)]
+BestC.int <- SSAllInter$C[which.min(SSAllInter$SS)]
+#extracts the value for A,B,C that have the lowest SS
+BestA.int
+BestB.int
+BestC.int
+```
+
+#Pseudocode 5.2 -> now generate data with process uncertainty
 
 ```{r Pseudocode 5.2}
 set.seed(1)
@@ -74,14 +95,24 @@ X <- seq(1,100,1)
 N <- 100
 w <- vector(length=length(X))
 
-Ypredic <- vector(length=length(X))
+YpredicDet    <- vector(length=length(X))
+YpredicUnc <- vector(length=length(X))
 
 for(i in 1:length(X)){
-  w[i] <- runif(n=1, min=-3, max=3)
-  Ypredic[i] <- A+(B*X[i])+(C*((X[i])^2)) + w[i]
+  w[i] <- runif(n=1, min=-3, max=3) #get random number from the process uncertainty distribution for each observation (same than doing w <- runif(n=length(X), min=-3, max=3))
+  YpredicUnc[i] <- A+(B*X[i])+(C*((X[i])^2)) + w[i] #predict y based on x and process ncertainty
+  YpredicDet[i]<- A+(B*X[i])+(C*((X[i])^2))
 }
 
-Ypredic
+UncertainPredictions <- data.frame(X, YpredicDet, YpredicUnc) %>%
+  gather(key="model", value="predY", -X) 
+
+ggplot(UncertainPredictions, aes(x=X, y= predY)) +
+ geom_line(aes(color=model)) +
+coord_cartesian(xlim = c(0,20), ylim=c(0,130))
+  #plot both models (zooming in from x=1 to x=150 to be able to spot differences)
+
+
 ```
 
 
