@@ -29,6 +29,8 @@ $\newcommand{\E}{\mathbb{E}}\newcommand{\Var}{\mathrm{Var}}$
 
 # Chapter 5: The Confrontation: Sum of Squares
 
+## 5.1
+
 First let's set up a process model function based on eqn 5.1: $Y_i = A + BX_i + CX_i^2 + W_i$ where $W_i$ is process uncertainty.  
 
 ``` {r process model function}
@@ -50,12 +52,12 @@ b <- 2.9
 c <- .6
 w <- 10
 
-a_vec <- seq(15, 25, .1)
-b_vec <- seq(0, 5, .05)
-c_vec <- seq(0, 1, .01)
+a_vec <- seq(15, 25, .2)
+b_vec <- seq(0, 5, .1)
+c_vec <- seq(0, 1, .02)
 
 
-x_vec <- seq(0, 20, .05)
+x_vec <- seq(0, 20, .1)
 y_vec <- process_model(x_vec, a, b, c, w)
 
 lm_df <- data.frame(x = x_vec, y = y_vec) %>%
@@ -284,5 +286,138 @@ knitr::kable(bind_rows(lm_ests, matrix_ests))
 
 ```
 
+## 5.2
+
+basically already incorporated into 5.1?
+
+Let's just run it again make it into a table of all the values, but with fewer X values.
+
+``` {r set up data 5_2}
+a <- 21.2
+b <- 2.9
+c <- .6
+w <- 20
+
+a_vec <- seq(15, 30, .2)
+b_vec <- seq(0, 5, .1)
+c_vec <- seq(0, 1, .02)
 
 
+x_vec <- seq(0, 20, 1)
+y_vec <- process_model(x_vec, a, b, c, w)
+
+lm_df <- data.frame(x = x_vec, y = y_vec) %>%
+  mutate(x2 = x^2)
+
+lm_check <- lm(y ~ x + x2, data = lm_df)
+knitr::kable(summary(lm_check) %>% broom::tidy())
+
+lm_ests <- data.frame(method = c('actual value', 'lm()'), 
+                      a_est = c(a, lm_check$coefficients[1]),
+                      b_est = c(b, lm_check$coefficients[2]),
+                      c_est = c(c, lm_check$coefficients[3]))
+
+```
+
+``` {r for loop it 5_2, results = 'asis'}
+
+ptm <- system.time({
+
+  L_array_small <- array(data = NA, 
+                   dim = c(length(a_vec), length(b_vec), length(c_vec)))
+
+  for(i in seq_along(a_vec)) { # i <- 1
+    a_est <- a_vec[i]
+    
+    for(j in seq_along(b_vec)) { # j <- 4
+      ### for given value of a_est, loop over all possible b values
+      b_est <- b_vec[j]
+  
+      for(k in seq_along(c_vec)) { # k <- 9
+        ### for given value of a_est and b_est, loop over all possible c values
+        c_est <- c_vec[k]
+  
+        
+        ### For this set of values for a_est, b_est, and c_est, calculate
+        ### the sum of squares and plug it into the array:
+        L_array_small[i, j, k] <- ssr_fxn(x_vec, y_vec, a_est, b_est, c_est)
+        
+      } ### done with c vals for this value of a_est, b_est; exit and increment b_est
+    } ### done with b vals for this value of a_est; exit and increment a_est
+  } ### done deal
+
+  ### Now we just find the location of the minimum value in the entire array, and 
+  ### figure out which values of a_est, b_est, and c_est go with that location.
+  
+  best_fit <- which(L_array_small == min(L_array_small), arr.ind = TRUE)
+
+}) ### end of system.time call
+
+cat(sprintf('Elapsed time for array size %s: %s sec\n', length(L_array_small), round(ptm[3], 3)))
+
+a_est <- a_vec[best_fit[1]]
+b_est <- b_vec[best_fit[2]]
+c_est <- c_vec[best_fit[3]]
+
+loop_ests <- data.frame(method = 'for loop',
+                        a_est, 
+                        b_est, 
+                        c_est)
+
+knitr::kable(bind_rows(lm_ests, loop_ests))
+
+vals_df <- data.frame(x = x_vec, y_actual = y_vec) %>%
+  mutate(y_det = a + x*b + x^2 * c,
+         y_pred = a_est + x * b_est + x^2 * c_est) %>%
+  gather(calc, y, starts_with('y_'))
+
+ggplot(vals_df, aes(x, y, color = calc)) +
+  ggtheme_plot() +
+  geom_point(size = 3, alpha = .5) +
+  geom_line(aes(group = calc)) +
+  scale_color_manual(values = c('black', 'cyan3', 'red3'))
+
+
+```
+
+## Goodness of fit
+
+Using the parameters from that last run, let's check goodness of fit of each WRT the estimates of the other two.
+
+``` {r}
+
+goodness_vec <- vector('numeric', length = length(a_vec))
+for (i in seq_along(a_vec)) {
+  goodness_vec[i] <- ssr_fxn(x_vec, y_vec, a_vec[i], b_est, c_est)
+}
+
+goodness_df <- data.frame(param = a_vec, goodness = goodness_vec)
+ggplot(goodness_df, aes(x = param, y = goodness_vec)) +
+  ggtheme_plot() +
+  geom_point() +
+  labs(title = 'Goodness of fit for A')
+
+goodness_vec <- vector('numeric', length = length(b_vec))
+for (i in seq_along(b_vec)) {
+  goodness_vec[i] <- ssr_fxn(x_vec, y_vec, a_est, b_vec[i], c_est)
+}
+
+goodness_df <- data.frame(param = b_vec, goodness = goodness_vec)
+ggplot(goodness_df, aes(x = param, y = goodness_vec)) +
+  ggtheme_plot() +
+  geom_point() +
+  labs(title = 'Goodness of fit for B')
+
+goodness_vec <- vector('numeric', length = length(c_vec))
+for (i in seq_along(c_vec)) {
+  goodness_vec[i] <- ssr_fxn(x_vec, y_vec, a_est, b_est, c_vec[i])
+}
+
+goodness_df <- data.frame(param = c_vec, goodness = goodness_vec)
+ggplot(goodness_df, aes(x = param, y = goodness_vec)) +
+  ggtheme_plot() +
+  geom_point() +
+  labs(title = 'Goodness of fit for C')
+
+
+```
