@@ -199,12 +199,25 @@ results <- expand.grid(As, Bs, Cs) %>%
          obs = list(y_obs),
          pred = pmap(.l = list(x = x, A = A, B = B, C = C), .f = process),
          ss = pmap_dbl(.l = list(pred = pred, obs = obs), .f = sum_squares)) %>% 
-  select(A, B, C, ss) %>% 
-  filter(ss == min(ss))
+  select(A, B, C, ss)
 end2 <- Sys.time()
 
-results
+results2 <- results %>% 
+  filter(ss == min(ss))
+
+results2
+
 ```
+
+```{r}
+results %>% 
+  filter(B == 5, C == 1) %>% 
+  ggplot(aes(x = A, y = ss)) +
+  geom_line() +
+  geom_point(color = "steelblue", size = 2) +
+  theme_bw()
+```
+
 
 This approach uses much less code, and it's a bit more self-evident (I think). It's about as slow for now, but when scaling up by increasing the precision it is faster `r end1-start1`, `r end2-start2`.
 
@@ -221,7 +234,7 @@ stargazer::stargazer(model, type = "html", intercept.bottom = F, single.row = T)
 ```{r}
 tibble(x, y_obs) %>% 
   mutate(for_loop = process(x = x, A = params[1], B = params[2], C = params[3], sd = 0),
-         tidy = process(x = x, A = results$A, B = results$B, C = results$C, sd = 0),
+         tidy = process(x = x, A = results2$A, B = results2$B, C = results2$C, sd = 0),
          lm = predict(model)) %>% 
   gather(method, value, -c(x, y_obs)) %>% 
   ggplot() +
@@ -235,7 +248,7 @@ We can also check the fitted vs predicted plots
 ```{r}
 tibble(x, y_obs) %>% 
   mutate(for_loop = process(x = x, A = params[1], B = params[2], C = params[3], sd = 0),
-         tidy = process(x = x, A = results$A, B = results$B, C = results$C, sd = 0),
+         tidy = process(x = x, A = results2$A, B = results2$B, C = results2$C, sd = 0),
          lm = predict(model)) %>% 
   gather(method, y_pred, -c(x, y_obs)) %>% 
   ggplot() +
