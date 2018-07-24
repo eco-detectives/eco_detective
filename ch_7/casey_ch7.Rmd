@@ -1,0 +1,61 @@
+---
+title: 'Eco-Detectives: chapter 7'
+author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float: yes
+    number_sections: true
+    theme: cerulean
+    highlight: haddock
+    includes: 
+      in_header: '~/github/src/templates/ohara_hdr.html'
+  pdf_document:
+    toc: true
+---
+
+``` {r setup, echo = TRUE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
+
+source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
+
+```
+
+$\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}} \newcommand{\L}{\mathscr{L}} \newcommand{\LL}{\mathscr{l}}$
+
+# Chapter 7: The Confrontation: Likelihood and Maximum Likelihood
+
+Minimizing sum of squares requires no assumptions about the distribution of error/uncertainty.  But if we have an idea about the probability distribution of uncertainty, we can use the maximum likelihood method.  This allows us to put confidence bounds on parameters, which we cannot do with sum of squares.
+
+Also, likelihood forms the basis of Bayesian analysis.
+
+
+## 7.1
+
+Start with a probability distribution, the probability of observing data $Y$ given a parameter $p$.  Consider a Poisson distribution for $k$ events in one unit of time:
+
+$$\Pr \{Y | p\} = \Pr\{Y = k \hspace{5pt}| \text{ rate parameter } r\} = \frac{e^{-r}r^k}{k!}$$
+
+This is probability of observation $Y$ given $r, k$, but we can also flip that to say the probability of $r, k$ given observation $y_i$.  For a set of data $Y$ the likelihood is the product of likelihoods of all the parameters given each observation.
+
+$$\L\{r | y_1, ..., y_n \} = \prod_{i=1}^n \frac{e^{-r}r^{y_i}}{y_i!}$$
+
+Easier to work with log likelihood, specifically negative log likelihood.
+
+\begin{align*}
+  \LL\{r | Y\} &= -\sum_{i=1}^n (-r \ln(e) + y_i \ln(r) - \ln(y_i!))\\
+    &= nr - \ln(r) \sum_{i=1}^n y_i  + \sum_{i=1}^n \ln(y_i!)
+\end{align*}
+
+But since the last term is independent of $r$, we can ignore it (since we can't change its value by changing $r$; alternately if we take the derivative with respect to $r$ this term drops out).
+
+\begin{align*}
+  \LL\{r | Y\} &= nr - \ln(r) \sum_{i=1}^n y_i  + \sum_{i=1}^n \ln(y_i!)\\
+  \frac{\partial\LL\{r | Y\}}{\partial r} &= n - \frac{\sum_{i=1}^n y_i}{r} = 0\\[12pt]
+  \Longrightarrow \hat r &= \frac{\sum_{i=1}^n y_i}{n}
+\end{align*}
+

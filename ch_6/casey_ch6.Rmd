@@ -1,0 +1,251 @@
+---
+title: 'Eco-Detectives: chapter 6'
+author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float: yes
+    number_sections: true
+    theme: cerulean
+    highlight: haddock
+    includes: 
+      in_header: '~/github/src/templates/ohara_hdr.html'
+  pdf_document:
+    toc: true
+---
+
+``` {r setup, echo = TRUE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
+
+source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
+
+```
+
+$\newcommand{\E}{\mathbb{E}}\newcommand{\Var}{\mathrm{Var}}$
+
+# Chapter 6: Insect oviposition behavior
+
+## 6.1
+
+$$\text{SSQ}(c_f) = \sum_{E=1}^{23} \sum_{C=1}^4 (C - c_f)^2 N(E, C)$$
+
+Read data into table.  The pseudocode looks like three nested loops: 
+
+* cycle over $c_f \in [1, 4]$
+* cycle over $E \in [4, 23]$
+* cycle over $C \in [1, 4]$
+* replace $SSQ(c_f)$ by $SSQ(c_f) + (C - c_f)^2 N(E, C)$.  Then cycle over $E$ and $C$ for thi $c_f$.
+
+``` {r} 
+
+N <- read_csv('table_6_1.csv') %>%
+  clean_df_names()
+
+N_c <- N[ , 2:5] %>% sum()
+  ### sum up all the observations
+  
+SSQ <- rep(0, 4)
+for(c_f in 1:4) { ### c_f <- 1
+  for(E in 4:23) { ### E <- 12
+    for(C in 1:4) { ### C <- 3
+      N_E_C <- N[N$eggcomplement == E, C + 1] %>% as.integer()
+        ### C matches the columns, skipping the eggcomplement column
+      SSQ[c_f] <- SSQ[c_f] + (C - c_f)^2 * N_E_C
+    }
+  }
+}
+
+SSQ_N <- SSQ / N_c
+
+print(SSQ_N)
+# 2.6862745 0.6274510 0.5686275 2.5098039
+```
+
+
+``` {r} 
+
+N <- read_csv('table_6_1.csv') %>%
+  clean_df_names()
+
+N_c <- N[ , 2:5] %>% sum()
+  ### sum up all the observations
+  
+N_df <- N %>%
+  gather(C, n_obs, starts_with('n')) %>%
+  mutate(C = str_replace_all(C, '[^0-9]', '') %>% as.integer(),
+         c_f = list(c(1, 2, 3, 4))) %>%
+  unnest(c_f)
+
+SSQ_df <- N_df %>%
+  group_by(c_f) %>%
+  summarize(ssq = sum((C - c_f)^2 * n_obs)) %>%
+  mutate(ssq_n = ssq / N_c)
+
+knitr::kable(SSQ_df)
+```
+
+## 6.2
+
+$$\text{SSQ (single switch)} = \sum_{E=1}^{23} \sum_{C=1}^4 [C - c(E)]^2 N(E, C)$$
+where
+
+\begin{align*}
+  c(e) = \begin{cases} 
+    c_1 &\text{if } e \leq e_1\\
+    c_2 &\text{if } e > e_1
+  \end{cases}
+\end{align*}
+
+Let's stick with the loop-centric version...
+
+``` {r} 
+
+N <- read_csv('table_6_1.csv') %>%
+  clean_df_names()
+
+N_c <- N[ , 2:5] %>% sum()
+  ### sum up all the observations
+  
+SSQ_opt <- 1e100
+  ### initialize to an absurdly high sum of squares
+c1_opt <- c2_opt <- e1_opt <- 0
+  ### don't really need to initialize these...
+
+for(c1 in 1:4) { ### c1 <- 1
+  for(c2 in c1:4) { ### c2 <- 2 ### assume c2 is greater than c1 for larger egg complement
+    for(e1 in 1:23) {
+      # cat('c1 = ', c1, '; c2 = ', c2, '; e1 = ', e1, '\n')
+      SSQ <- 0
+        ### initialize SSQ for this parameter set
+      
+      for(E in 4:23) { ### E <- 12
+        for(C in 1:4) { ### C <- 3
+          N_E_C <- N[N$eggcomplement == E, C + 1] %>% as.integer()
+            ### C matches the columns, skipping the eggcomplement column
+          
+          c_e <- ifelse(E <= e1, c1, c2)
+          
+          SSQ <- SSQ + (C - c_e)^2 * N_E_C
+        } ### end of E loop
+      } ### end of C loop - i.e. end of SSQ calcs for these e1, c1, c2 vals
+      
+      ### Check SSQ vs SSQ_opt - if better (lower), set c1_opt, c2_opt, e1_opt
+      ### to current values.
+      if(SSQ < SSQ_opt) {
+        SSQ_opt <- SSQ
+        c1_opt  <- c1
+        c2_opt  <- c2
+        e1_opt  <- e1
+      }
+    } ### end of e1 loop
+  } ### end of c2 loop
+} ### end of c1 loop
+
+SSQ_N <- SSQ_opt / (N_c - 6)
+
+cat(sprintf('Optimal values: c1 = %d, c2 = %d, e1 = %d, SSQ = %f\n', 
+            c1_opt, c2_opt, e1_opt, SSQ_N))
+# 2.6862745 0.6274510 0.5686275 2.5098039
+```
+
+### Likelihood profile for switching egg complement
+
+Holding $c_1$ and $c_2$ at their optimal values, vary $e_1$ to generate a likelihood profile.
+
+``` {r} 
+
+N <- read_csv('table_6_1.csv') %>%
+  clean_df_names()
+
+N_c <- N[ , 2:5] %>% sum()
+  ### sum up all the observations
+
+c1_opt <- 2
+c2_opt <- 3
+  
+N_df <- N %>%
+  gather(C, n_obs, starts_with('n')) %>%
+  mutate(C = str_replace_all(C, '[^0-9]', '') %>% as.integer(),
+         e1 = list(c(4:23))) %>%
+  unnest(e1) %>%
+  mutate(c_e = ifelse(eggcomplement <= e1, c1_opt, c2_opt))
+
+SSQ_df <- N_df %>%
+  group_by(e1) %>%
+  summarize(ssq = sum((C - c_e)^2 * n_obs)) %>%
+  mutate(ssq_n = ssq / (N_c - 6))
+
+ggplot(SSQ_df, aes(x = e1, y = ssq_n)) +
+  ggtheme_plot() +
+  geom_point() +
+  xlim(c(0, NA)) +
+  ylim(c(0, NA)) +
+  geom_vline(xintercept = 8, color = 'red')
+```
+
+## 6.3 bootstrapping
+
+``` {r} 
+
+N <- read_csv('table_6_1.csv') %>%
+  clean_df_names()
+
+N_c <- N[ , 2:5] %>% sum()
+  ### sum up all the observations
+
+c1_opt <- 2
+c2_opt <- 3
+  
+### let's make it truly long format
+N_df <- N %>%
+  gather(C, n_obs, starts_with('n')) %>%
+  mutate(C = str_replace_all(C, '[^0-9]', '') %>% as.integer()) %>%
+  tidyr::uncount(n_obs)
+
+### initialize counts for fixed model comparison (fixed = 2 vs 3)
+### and switch model comparison (vs both fixed)
+n_iterations <- 10000
+fixed <- switch <- rep(NA, n_iterations)
+  
+ptm <- proc.time()
+
+for (i in 1:n_iterations) { ### i <- 1
+  if(i %% 100 == 0) message(i, '... ')
+  N_bs <- N_df %>%
+    sample_frac(size = 1, replace = TRUE) %>%
+    count(eggcomplement, C)
+  
+  SSQ_c2 <- N_bs %>%
+    mutate(c_f = 2) %>%
+    summarize(ssq = sum((C - c_f)^2 * n)) %>%
+    mutate(ssq_n = ssq / (N_c)) %>%
+    .$ssq_n
+  
+  SSQ_c3 <- N_bs %>%
+    mutate(c_f = 3) %>%
+    summarize(ssq = sum((C - c_f)^2 * n)) %>%
+    mutate(ssq_n = ssq / (N_c)) %>%
+    .$ssq_n
+  
+  SSQ_switch <- N_bs %>%
+    mutate(c_e = ifelse(eggcomplement <= 8, 2, 3)) %>%
+    summarize(ssq = sum((C - c_e)^2 * n)) %>%
+    mutate(ssq_n = ssq / (N_c)) %>%
+    .$ssq_n
+  
+  fixed[i]  <- ifelse(SSQ_c2 < SSQ_c3, 'c_f = 2', 'c_f = 3')
+  switch[i] <- case_when(SSQ_switch < (min(SSQ_c2, SSQ_c3)) ~ 'switch',
+                         SSQ_c2 < SSQ_c3                    ~ 'c_f = 2',
+                         TRUE                               ~ 'c_f = 3')
+}
+
+cat(sprintf('%s iterations: elapsed time: %.2f \n', n_iterations, (proc.time() - ptm)[3]))
+table(fixed)
+table(switch)
+```
+
+
