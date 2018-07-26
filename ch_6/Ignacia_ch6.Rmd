@@ -1,0 +1,124 @@
+---
+title: "Chapter 6: The Evolutionary Ecology of Insect Oviposition Behavior "
+author: "Ignacia Rivera"
+date: "July 23, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(here)
+library(dplyr)
+library(tidyr)
+library(DescTools)
+```
+
+### Does the clutch size of the parasitoid wasp (*Aphytis linganensis*) depend on its egg complement? 
+
+We will use sum of squares (SSQ) to confront the prediction of different models on oviposition behavior. These models differ in their prediction about the relationship between clutch size and egg complement. 
+
+![Aphytis linganensis doing her oviposition moves.](C:/Users/Ignacia Rivera/Desktop/GitHub/eco_detective/ch_6/Aphytis.jpg)
+
+#### a) Fit for Single-Host and Rate-Maximizing Models 
+
+Assuming constant quality of hosts, these two models predict that clutch is independent of egg complement in the first encounter. Table below show the sum of squares for models assuming different values for the optimal clutch size. 
+
+```{r Constant clutch size}
+
+# Importing table with number of observations per clutch size and Egg complement 
+eggs.dta <- read.csv(here("ch_6/table_6_1.csv"))
+
+# If the optimal clutch size is c_f what would be the sum of squares of our data?
+
+c_f <- c(1,2,3,4) # vector with optimal clutch sizes being considered
+Obs_clutch <- c(1,2,3,4)   # vector with osberved values of clutch sizes
+
+# Calculated thow many times each clutch size is observed in the data set
+n.clutchs <- eggs.dta %>% 
+  colSums() 
+
+n.clutchs <- n.clutchs[2:5]
+
+# Matrix to save SSQ for each c_f
+
+SSQ.egg.indep <- matrix(NA, ncol =2, nrow= length(c_f))
+colnames(SSQ.egg.indep) <- c('Optimal_clutch', 'SSQ/Nc')
+
+# If optimal clutch size is c_f what is the SSQ base on the data?
+
+for (i in c_f){
+  
+  SSQ = sum((i - Obs_clutch)^2 * n.clutchs)/ sum(n.clutchs)
+  
+  SSQ.egg.indep[i,1] = i
+  SSQ.egg.indep[i,2] = SSQ
+  
+}
+
+knitr::kable(SSQ.egg.indep)
+
+
+```
+
+#### b) Fit for State-variable Models 
+
+Assuming constant quality of hosts, this type of models predict that clutch size will increase with egg complement. The simplest version of this model considers three parameters $c_1$, $c_2$, and $e_1$ and predicts that the clutch size is a function of egg complement (i.e. $c(e)$) given by:
+
+$$ c(e) = \cases {c_1 & if e \leq e_1 \\\ c_2 & if e > e_1} $$
+The Table below shows the values for the parameters $c_1$, $c_2$ and $e_1$ that produce the best fit for the simplest verion of the model, as well as the measurment of fit ($SSQ/N-6$).
+
+```{r Clutch size increasing on egg complement}
+
+# Creating vectors with different values for each parameter
+
+c_1 <- c(1,2,3,4) 
+c_2 <- c(1,2,3,4)
+e_1 <- c(seq(1:23))
+
+# Generates a dataset with each observation, its egg complement and associated clutch size
+
+obsv.dta <- eggs.dta %>% 
+  gather(key = clutch.size, value= count, 2:5) %>% 
+  Untable(freq = 'count') %>% 
+  mutate(clutch.size = case_when(clutch.size == "n.clutch.size.1" ~ 1, clutch.size == "n.clutch.size.2" ~ 2, clutch.size == "n.clutch.size.3" ~ 3, clutch.size == "n.clutch.size.4" ~ 4))
+
+# Matrix to save SSQ for each combination of parameters
+
+SSQ.egg.increasing <- array(NA, dim = c(length(e_1), length(c_1), length(c_2)))
+
+# If c_1 = i, c_2=j, and e_1 = k, what is the SSQ base on the data?
+
+for (i in 1:length(c_1)){
+  
+  for (j in 1:length(c_2)){
+    
+    for (k in 1:length(e_1)){
+  
+     # Vector with the predicted clutch size based on the model above and the parameters
+     c_predict = ifelse(obsv.dta$EggComplement <= e_1[k], c_1[i], c_2[j])
+     
+     # Calculates te sum of squares 
+     
+     SSQ = sum((obsv.dta$clutch.size - c_predict)^2)/(length(obsv.dta$EggComplement)-6)
+     
+     # Stores values of parameters
+     
+     SSQ.egg.increasing[k,i,j] = SSQ
+     
+  
+    } 
+  
+  }
+  
+}
+
+# Looks for the indexes where the min value for SSQ/N-6 is 
+
+result <- data.frame(which(SSQ.egg.increasing == min(SSQ.egg.increasing), arr.ind=TRUE))
+result$SSQ <- min(SSQ.egg.increasing)
+colnames(result) <- c('e1', 'c1', 'c2', 'SSQ/N')
+
+knitr::kable(result)
+```
+
