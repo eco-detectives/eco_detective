@@ -18,9 +18,9 @@ library(DescTools)
 
 We will use sum of squares (SSQ) to confront the prediction of different models on oviposition behavior. These models differ in their prediction about the relationship between clutch size and egg complement. 
 
-![Aphytis linganensis doing her oviposition moves.](C:/Users/Ignacia Rivera/Desktop/GitHub/eco_detective/ch_6/Aphytis.jpg)
+![Aphytis linganensis ovopositioning.](C:/Users/Ignacia Rivera/Desktop/GitHub/eco_detective/ch_6/Aphytis.jpg)
 
-#### a) Fit for Single-Host and Rate-Maximizing Models 
+#### a) Fit for Single-Host and Rate-Maximizing Models (fixed-clutch models) 
 
 Assuming constant quality of hosts, these two models predict that clutch is independent of egg complement in the first encounter. Table below show the sum of squares for models assuming different values for the optimal clutch size. 
 
@@ -34,7 +34,7 @@ eggs.dta <- read.csv(here("ch_6/table_6_1.csv"))
 c_f <- c(1,2,3,4) # vector with optimal clutch sizes being considered
 Obs_clutch <- c(1,2,3,4)   # vector with osberved values of clutch sizes
 
-# Calculated thow many times each clutch size is observed in the data set
+# Calculated how many times each clutch size is observed in the data set
 n.clutchs <- eggs.dta %>% 
   colSums() 
 
@@ -56,10 +56,15 @@ for (i in c_f){
   
 }
 
+```
+
+```{r results 1, echo = FALSE}
+
 knitr::kable(SSQ.egg.indep)
 
-
 ```
+
+
 
 #### b) Fit for State-variable Models 
 
@@ -118,7 +123,89 @@ for (i in 1:length(c_1)){
 result <- data.frame(which(SSQ.egg.increasing == min(SSQ.egg.increasing), arr.ind=TRUE))
 result$SSQ <- min(SSQ.egg.increasing)
 colnames(result) <- c('e1', 'c1', 'c2', 'SSQ/N')
+```
+
+```{r results 2, echo= FALSE}
 
 knitr::kable(result)
+
+```
+
+
+### Bootstrap competition
+
+This dataset involves uncertainty, what if we would have another dataset? Would the variable clutch-model be better than the others?
+
+```{r bootstrap competition}
+
+boot.models <- function(sim, data) {
+
+  ## matrix to store fit meassure for the three models in each simulation.
+  store.results <- matrix(NA, ncol = 3, nrow = sim)
+  colnames(store.results) <- c('fixed_2', 'fixed_3', 'variable')
+  colnames(data) <- c('EggComplement', 'clutch.size')
+
+  for (i in 1:sim){
+
+    ## Generates random intergers from 1 to 102 with replacement. 
+    indices <- sample(1:length(data$clutch.size), length(data$clutch.size), replace=T)
+
+    ## Generates a new sample by taking the random indices generated above.
+    new.sample <- data[indices,]
+    
+    ## Calculates fit for fix-clutch model with optimal clutch size = 2
+    fit_fixed_2 = sum((2 - new.sample$clutch.size)^2)/ length(new.sample$clutch.size)
+
+    ## Calculates fit for fix-clutch model with optimal clutch size = 3
+    fit_fixed_3 = sum((3 - new.sample$clutch.size)^2)/ length(new.sample$clutch.size)
+
+    ## Calculates fit for variable-clutch model with parameters e1 = 8, c1= 2, and c2 =3
+
+      ### Vector with the predicted clutch size based on the model above and the parameters
+      c_predict = ifelse(new.sample$EggComplement <= 8, 2, 3)
+     
+      ### Calculates te sum of squares 
+      fit_variable = sum((new.sample$clutch.size - c_predict)^2)/(length(new.sample$clutch.size)-6)
+    
+    ## Stores results of simulation
+    
+    store.results[i,1] <- fit_fixed_2
+    store.results[i,2] <- fit_fixed_3
+    store.results[i,3] <- fit_variable
+    
+  }
+  
+    ## Counts how many times one of the fixed model wins the competition of best fit 
+    
+    ### In which column is the minimum for each sim?
+    min.column.fixed <- apply(store.results[,1:2], 1, FUN=which.min)
+    
+    ### Counts how many times the minimum is in each column
+    model.competition.fixed <- data.frame(fixed_2 = sum(min.column.fixed  ==1), fixed_3 = sum(min.column.fixed  ==2))
+  
+  ## Counts how many times a model wins the competition of best fit
+    
+    ### In which column is the minimum for each sim?
+    min.column <- apply(store.results, 1, FUN=which.min)
+    
+    ### Counts how many times the minimum is in each column
+    model.competition.all <- data.frame(fixed_2 = sum(min.column ==1), fixed_3 = sum(min.column ==2), variable = sum(min.column ==3))
+    
+    results <- list( between_fixed = model.competition.fixed, between_all = model.competition.all)
+    
+  return(results)
+}
+
+
+results <- boot.models(10000, obsv.dta)
+```
+
+```{r results 3, echo = FALSE}
+
+
+knitr::kable(results$`between_fixed`)
+knitr::kable(results$`between_all`)
+
+
 ```
 
