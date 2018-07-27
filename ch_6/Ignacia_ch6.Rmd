@@ -1,0 +1,211 @@
+---
+title: "Chapter 6: The Evolutionary Ecology of Insect Oviposition Behavior "
+author: "Ignacia Rivera"
+date: "July 23, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(here)
+library(dplyr)
+library(tidyr)
+library(DescTools)
+```
+
+### Does the clutch size of the parasitoid wasp (*Aphytis linganensis*) depend on its egg complement? 
+
+We will use sum of squares (SSQ) to confront the prediction of different models on oviposition behavior. These models differ in their prediction about the relationship between clutch size and egg complement. 
+
+![Aphytis linganensis ovopositioning.](C:/Users/Ignacia Rivera/Desktop/GitHub/eco_detective/ch_6/Aphytis.jpg)
+
+#### a) Fit for Single-Host and Rate-Maximizing Models (fixed-clutch models) 
+
+Assuming constant quality of hosts, these two models predict that clutch is independent of egg complement in the first encounter. Table below show the sum of squares for models assuming different values for the optimal clutch size. 
+
+```{r Constant clutch size}
+
+# Importing table with number of observations per clutch size and Egg complement 
+eggs.dta <- read.csv(here("ch_6/table_6_1.csv"))
+
+# If the optimal clutch size is c_f what would be the sum of squares of our data?
+
+c_f <- c(1,2,3,4) # vector with optimal clutch sizes being considered
+Obs_clutch <- c(1,2,3,4)   # vector with osberved values of clutch sizes
+
+# Calculated how many times each clutch size is observed in the data set
+n.clutchs <- eggs.dta %>% 
+  colSums() 
+
+n.clutchs <- n.clutchs[2:5]
+
+# Matrix to save SSQ for each c_f
+
+SSQ.egg.indep <- matrix(NA, ncol =2, nrow= length(c_f))
+colnames(SSQ.egg.indep) <- c('Optimal_clutch', 'SSQ/Nc')
+
+# If optimal clutch size is c_f what is the SSQ base on the data?
+
+for (i in c_f){
+  
+  SSQ = sum((i - Obs_clutch)^2 * n.clutchs)/ sum(n.clutchs)
+  
+  SSQ.egg.indep[i,1] = i
+  SSQ.egg.indep[i,2] = SSQ
+  
+}
+
+```
+
+```{r results 1, echo = FALSE}
+
+knitr::kable(SSQ.egg.indep)
+
+```
+
+
+
+#### b) Fit for State-variable Models 
+
+Assuming constant quality of hosts, this type of models predict that clutch size will increase with egg complement. The simplest version of this model considers three parameters $c_1$, $c_2$, and $e_1$ and predicts that the clutch size is a function of egg complement (i.e. $c(e)$) given by:
+
+$$ c(e) = \cases {c_1 & if e \leq e_1 \\\ c_2 & if e > e_1} $$
+The Table below shows the values for the parameters $c_1$, $c_2$ and $e_1$ that produce the best fit for the simplest verion of the model, as well as the measurment of fit ($SSQ/N-6$).
+
+```{r Clutch size increasing on egg complement}
+
+# Creating vectors with different values for each parameter
+
+c_1 <- c(1,2,3,4) 
+c_2 <- c(1,2,3,4)
+e_1 <- c(seq(1:23))
+
+# Generates a dataset with each observation, its egg complement and associated clutch size
+
+obsv.dta <- eggs.dta %>% 
+  gather(key = clutch.size, value= count, 2:5) %>% 
+  Untable(freq = 'count') %>% 
+  mutate(clutch.size = case_when(clutch.size == "n.clutch.size.1" ~ 1, clutch.size == "n.clutch.size.2" ~ 2, clutch.size == "n.clutch.size.3" ~ 3, clutch.size == "n.clutch.size.4" ~ 4))
+
+# Matrix to save SSQ for each combination of parameters
+
+SSQ.egg.increasing <- array(NA, dim = c(length(e_1), length(c_1), length(c_2)))
+
+# If c_1 = i, c_2=j, and e_1 = k, what is the SSQ base on the data?
+
+for (i in 1:length(c_1)){
+  
+  for (j in 1:length(c_2)){
+    
+    for (k in 1:length(e_1)){
+  
+     # Vector with the predicted clutch size based on the model above and the parameters
+     c_predict = ifelse(obsv.dta$EggComplement <= e_1[k], c_1[i], c_2[j])
+     
+     # Calculates te sum of squares 
+     
+     SSQ = sum((obsv.dta$clutch.size - c_predict)^2)/(length(obsv.dta$EggComplement)-6)
+     
+     # Stores values of parameters
+     
+     SSQ.egg.increasing[k,i,j] = SSQ
+     
+  
+    } 
+  
+  }
+  
+}
+
+# Looks for the indexes where the min value for SSQ/N-6 is 
+
+result <- data.frame(which(SSQ.egg.increasing == min(SSQ.egg.increasing), arr.ind=TRUE))
+result$SSQ <- min(SSQ.egg.increasing)
+colnames(result) <- c('e1', 'c1', 'c2', 'SSQ/N')
+```
+
+```{r results 2, echo= FALSE}
+
+knitr::kable(result)
+
+```
+
+
+### Bootstrap competition
+
+This dataset involves uncertainty, what if we would have another dataset? Would the variable clutch-model be better than the others?
+
+```{r bootstrap competition}
+
+boot.models <- function(sim, data) {
+
+  ## matrix to store fit meassure for the three models in each simulation.
+  store.results <- matrix(NA, ncol = 3, nrow = sim)
+  colnames(store.results) <- c('fixed_2', 'fixed_3', 'variable')
+  colnames(data) <- c('EggComplement', 'clutch.size')
+
+  for (i in 1:sim){
+
+    ## Generates random intergers from 1 to 102 with replacement. 
+    indices <- sample(1:length(data$clutch.size), length(data$clutch.size), replace=T)
+
+    ## Generates a new sample by taking the random indices generated above.
+    new.sample <- data[indices,]
+    
+    ## Calculates fit for fix-clutch model with optimal clutch size = 2
+    fit_fixed_2 = sum((2 - new.sample$clutch.size)^2)/ length(new.sample$clutch.size)
+
+    ## Calculates fit for fix-clutch model with optimal clutch size = 3
+    fit_fixed_3 = sum((3 - new.sample$clutch.size)^2)/ length(new.sample$clutch.size)
+
+    ## Calculates fit for variable-clutch model with parameters e1 = 8, c1= 2, and c2 =3
+
+      ### Vector with the predicted clutch size based on the model above and the parameters
+      c_predict = ifelse(new.sample$EggComplement <= 8, 2, 3)
+     
+      ### Calculates te sum of squares 
+      fit_variable = sum((new.sample$clutch.size - c_predict)^2)/(length(new.sample$clutch.size)-6)
+    
+    ## Stores results of simulation
+    
+    store.results[i,1] <- fit_fixed_2
+    store.results[i,2] <- fit_fixed_3
+    store.results[i,3] <- fit_variable
+    
+  }
+  
+    ## Counts how many times one of the fixed model wins the competition of best fit 
+    
+    ### In which column is the minimum for each sim?
+    min.column.fixed <- apply(store.results[,1:2], 1, FUN=which.min)
+    
+    ### Counts how many times the minimum is in each column
+    model.competition.fixed <- data.frame(fixed_2 = sum(min.column.fixed  ==1), fixed_3 = sum(min.column.fixed  ==2))
+  
+  ## Counts how many times a model wins the competition of best fit
+    
+    ### In which column is the minimum for each sim?
+    min.column <- apply(store.results, 1, FUN=which.min)
+    
+    ### Counts how many times the minimum is in each column
+    model.competition.all <- data.frame(fixed_2 = sum(min.column ==1), fixed_3 = sum(min.column ==2), variable = sum(min.column ==3))
+    
+    results <- list( between_fixed = model.competition.fixed, between_all = model.competition.all)
+    
+  return(results)
+}
+
+
+results <- boot.models(10000, obsv.dta)
+```
+
+```{r results 3, echo = FALSE}
+
+
+knitr::kable(results$`between_fixed`)
+knitr::kable(results$`between_all`)
+
+
+```
+
