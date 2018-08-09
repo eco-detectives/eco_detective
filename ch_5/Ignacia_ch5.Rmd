@@ -1,0 +1,140 @@
+---
+title: "Chapter 5: The Confrontation - Sum of Squares "
+author: "Ignacia Rivera"
+date: "July 8, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+```
+
+## Fiting model parameters using the sum squares method (SSM)
+
+We first assume a process model that generates the data. For example:
+
+$$Y_i = \alpha + \beta X_i + \epsilon_i  $$
+Where $\alpha$ and $\beta$ are parameters and $\epsilon_i$ is the process uncertainty (we can also have obervation uncertainty).
+
+We can obtain a predicted value for each $X_i$ based on the above process model and ignoring procss uncertainty. 
+
+To find the values of $\alpha$ and $\beta$ we use the SSM. Which bassically looks for the values of the pramateres that minimizes the sum of squares (the sum of the deviations of each observation from its predicted value, i.e. $\sum (Y_{pre,i} - Y_{obs,i})^2$).
+
+We can find the values of $\alpha$ and $\beta$ that minimize the sum of squares analliically by seting the partial derivatives equal to zero (to find the min). An alternative approach is to conduct a numerical search over a reasonable range of values for the parameters we want to fit. That is what we are implementing in the following code.
+
+### Step 1. Generating data based on a known process model
+
+The data will be generated base on the process model below and will include normally-distributed process uncertainty.
+
+$$ Y_i = A + BX_i + CX_i^2 + W_i$$
+
+#### With vectors
+
+```{r Generating data using vectors based on the model above}
+
+# Model parameters
+A = 0.8
+B = 0.4
+C = 0.25
+
+# Number of observations
+N = 100
+
+# Vectorized way
+X = round(runif(N, min= 0, max=10),0) #draws x_i from a uniform distribution
+W = rnorm(N, mean= 0, sd = 0.6) #draws w_i from a normal distirbution
+
+Y.obs = A + B*X + C*X^2 + W
+```
+
+#### With a loopy loop
+
+```{r Generating the data using a loop}
+
+# Model parameters
+A = 1
+B = 0.5
+C = 0.25
+
+# Number of observations
+N = 100
+
+# Loop
+
+x <- rep(NA, N)
+Y.obs <- rep(NA, N)
+
+for (i in 1:N){
+  
+  x.i = round(runif(1, min= 0, max=10),0) #draws x_i from a uniform distribution
+  w.i = rnorm(1, mean= 0, sd = 0.6) #draws w_i from a normal distirbution
+  Y.obs.i = A + B*x.i + C*x.i^2 + w.i
+  
+  X[i] = x.i
+  Y.obs[i] = Y.obs.i 
+
+}
+
+```
+
+
+### Step 2. Searching values for parameters $A$, $B$ and $C$ that minimize the SS using a nested loop 
+
+```{r Numerical search of values for A, B and C that minimize the SS}
+
+fiting.param.sum.sq <- function(min.A, max.A, step.A, min.B, max.B, step.B, 
+min.C, max.C, step.C) {
+
+# Generating vectors with different values for each parameter
+
+A.estimates <- c(seq(from= min.A, to= max.A, by= step.A))
+B.estimates <- c(seq(from= min.B, to= max.B, by= step.B))
+C.estimates <- c(seq(from= min.C, to= max.C, by= step.C))
+
+# Setting an array (3D) to store the sum.s for each combination of paramters A, B and C. Rows are As, columns are Bs and matrices are Cs. 
+
+store.array <- array(data= NA, dim = c(length(A.estimates), length(B.estimates), length(C.estimates)))
+
+# Looping over combinations of A, B and C
+
+for (a in 1:length(A.estimates)){ # iterates over values of A
+  
+  for (b in 1:length(B.estimates)){ # iterates over values of B
+    
+    for(c in 1:length(C.estimates)){ # iterates over values of C
+      
+      # calculate the predicted values based on the independent variable for A,B and C
+      Y.pred = A.estimates[a] + B.estimates[b]*X + C.estimates[c]*X^2 
+      
+      # calculates the sum of squares for that combination of values A,B,C
+      sum.sq = sum((Y.pred - Y.obs)^2)
+      
+      # stores the calculates sum of squares in the array
+      store.array[a,b,c] <- sum.sq
+      
+
+    }
+    
+  }
+  
+}
+
+# Extracts the indices of store.array where the minimum "lives"
+index = which(store.array == min(store.array), arr.ind=TRUE)
+
+# Looks for the values of the paramteres based on the indices and puts them on a list. 
+param = list(A= A.estimates[index[1]], B= B.estimates[index[2]], C= C.estimates[index[3]])
+
+return(param)
+
+}
+
+# testing
+
+test <- fiting.param.sum.sq(min.A = 0, max.A = 3, step.A = 0.1, min.B = 0, max.B = 2, step.B = 0.05, 
+min.C = 0, max.C = 1, step.C = 0.025)
+
+test
+
+```
