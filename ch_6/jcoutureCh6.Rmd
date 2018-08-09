@@ -1,0 +1,180 @@
+---
+title: 'Ch6: model selection with SSQ'
+author: "Jessica Couture"
+date: "August 9, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Egg independent clutches
+
+##### Calculate weighted sums of squares
+
+"Weight the sum of squared deviations by the number of observations at that egg complement (E) and clutch (C). There are 4 values of clutch (`c_{f} = 1, 2, 3, or 4`), each of which prodices a different value of SSQ(`c_{f}`)."
+
+
+```{r 6.1data}
+ecDat<-read.csv("table_6_1.csv")
+
+head(ecDat)
+
+```
+
+##### Functions to loop through SSQ calcs
+
+$$SSQ(c_{f}) = \sum_{E=1}^{23}\sum_{C=1}^{4}(C-c_f)^{2}N(E,C) $$
+
+For each `c_{f}` first loop through `C` values to calculate sums and then loop through E values. The pseudocode says to use `E=4-23`.
+
+```{r ssqLoops}
+
+wtSSQ<-function(cf){
+ 
+  sum2<-0
+  
+  for(i in 1:nrow(ecDat)){
+  
+    sum1<-0
+      
+    for(j in 1:4){
+        eq<-((j-cf)^2)*(ecDat[i,j+1])
+        sum1<-sum1+eq
+    }
+  
+    sum2<-sum2+sum1
+  }
+  return(sum2)
+}
+
+ssq1=wtSSQ(1)
+ssq2=wtSSQ(2)
+ssq3=wtSSQ(3)
+ssq4=wtSSQ(4)
+
+ssqDF<-data.frame(cf=c(1,2,3,4),
+                  ssq=c(ssq1,ssq2,ssq3,ssq4)) %>%
+  mutate(compare=ssq/sum(ecDat[,2:ncol(ecDat)]))
+
+ssqDF
+
+```
+
+## Clutch size increases with complement size
+
+"We denote clutch size when egg complement is `e` by `c(e)`. Adopting this viewpoint, the simplest variable-vlutch model is one in which the parasitoid switches  from clutch size `c_{1}` to clutch size `c_2 > c_1` at egg complement `e_1`"  
+
+In this case the SSQ is calculated with:
+$$SSQ(switch) = \sum_{E=1}^{23}\sum_{C=1}^{4}(C-c(E))^{2}N(E,C) $$
+
+Where `c(E)` takes on either `c_1` or `c_2` depending on the values of `E` and `e_1`
+
+##### Calculate sum of squares
+
+```{r ssqSwtch}
+
+c1<-1:4
+
+swiDf<-data.frame(matrix(nrow=20,ncol=4))
+
+swiSSQ<-function(clch,swi){
+ 
+  c1<-clch
+  c2<-clch+1
+  
+  sum2<-0
+  
+  for(i in 1:nrow(ecDat)){
+  
+    sum1<-0
+      
+    for(j in 1:4){
+      ce<-ifelse((i+3)>swi,c2,c1)
+      
+      eq<-((j-ce)^2)*(ecDat[i,j+1])
+      
+      sum1<-sum1+eq
+    }
+  
+    sum2<-sum2+sum1
+  }
+  return(sum2)
+}
+
+swiDf[,1]<-sapply(ecDat$EggComplement,function(x) swiSSQ(1,x))
+swiDf[,2]<-sapply(ecDat$EggComplement,function(x) swiSSQ(2,x))
+swiDf[,3]<-sapply(ecDat$EggComplement,function(x) swiSSQ(3,x))
+swiDf[,4]<-sapply(ecDat$EggComplement,function(x) swiSSQ(4,x))
+
+colnames(swiDf)=c("C1is1","C1is2","C1is3","C1is4")
+
+plot(ecDat$EggComplement,swiDf$C1is1,type="l")
+plot(ecDat$EggComplement,swiDf$C1is2,type="l",col="red")
+plot(ecDat$EggComplement,swiDf$C1is3,type="l",col="blue")
+plot(ecDat$EggComplement,swiDf$C1is4,type="l",col="green")
+
+which.min(swiDf$C1is2)+3
+```
+
+## Bootstrapping
+
+```{r transfData}
+rawDat<-data.frame(E=numeric(), C=numeric())
+
+for(i in 1:nrow(ecDat)){
+  for(j in 2:ncol(ecDat)) {
+    newDF<-data.frame(E=rep(ecDat[i,1],ecDat[i,j]),
+                      C=rep(j-1,ecDat[i,j]))
+    rawDat<-rbind(rawDat,newDF)
+  }
+}
+head(rawDat)
+```
+
+Use `sample()` to draw the bootstrap samples from the `rawDat` dataframe:
+
+```{r sample}
+
+rawVec<-apply(rawDat,1,function(x) paste(x[1],x[2]))
+
+bsVec<-sample(rawVec,replace = T)
+
+bsDf<-data.frame(E=sapply(strsplit(bsVec," "),function(x) x[1]),
+                 C=sapply(strsplit(bsVec," "),function(x) x[2]))
+```
+
+##### Test bootstrapped data using the tests above:
+
+Fixed clutch model:
+
+```{r fixdClutch}
+ecDat<-data.frame(table(bsDf)) %>%
+  spread(key=C,value=Freq) %>%
+  mutate(E=as.numeric(E)+3) %>%
+  arrange(E)
+
+ssqBs2=wtSSQ(2)
+ssqBs3=wtSSQ(3)
+
+ssqBS<-data.frame(cf=c(2,3),
+                  ssq=c(ssq2,ssq3)) %>%
+  mutate(compare=ssq/sum(ecDat[,2:ncol(ecDat)]))
+
+ssqBS
+
+```
+
+Variable clutch model:
+
+```{r varClutch}
+
+vClBs<-sapply(ecDat$E,function(x) swiSSQ(2,x))
+
+plot(ecDat$E,vClBs,type="l")
+
+which.min(vClBs)+3
+
+```
