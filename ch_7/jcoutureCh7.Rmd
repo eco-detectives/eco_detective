@@ -1,0 +1,54 @@
+---
+title: 'Ch7: Likelihood and Max Likelihood'
+author: "Jessica Couture"
+date: "August 12, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## PC 7.1: Overexploitation of an unfished resource
+
+"To describe this situation, we could use the Monte Carlo method to generate data in the time periods (starting with an unperturbed population), allow harvesting of half of the population at times 3, 4, and 5 (the overexploitation), and reduce the harvest rate to almlost zero for the last four time periods (the 'management action').  Assume: `r = 0.5, K = 1000, \sigma_{W} = 0.1, \sigma{V} = 0.1`"
+
+```{r monteCarlo}
+
+##### Define params:
+r=0.5
+K=1000
+sigW=0.1 # process uncert
+sigV=0.1 # observation uncert
+ct=0.5
+fshYrs<-c(3,4,5)
+
+
+mcMod<-data.frame(t=0:10,
+                  rlPop=c(K,rep(NA,10)))
+
+logPU<-function(df){
+  
+  df$Zw<-rnorm(11,mean=0,sd=1)
+  for(i in 2:11){
+    
+    C=ifelse(df$t %in% fshYrs,ct,0) # fishing just during the years defined
+    sW<-exp(df$Zw[i]*sigW-(sigW^2)/2)
+    
+    df$rlPop[i]<-sW*(df$rlPop[i-1]+r*df$rlPop[i-1]*(1-(df$rlPop[i-1]/K)-C))
+    
+  }
+  
+  df<-df %>%
+    mutate(Zv=rnorm(11,mean=0,sd=1))%>%
+    mutate(obsPop=rlPop*exp(Zv*sigV-(sigV^2)/2))
+ return(df) 
+}
+
+modDF<-logPU(mcMod)
+
+plot(rlPop~t,data=modDF,type="l",col="green",xlab="year",ylab="pop",ylim=c(0,max(c(rlPop,obsPop))))
+lines(obsPop~t,data=modDF, col="red")
+```
+
