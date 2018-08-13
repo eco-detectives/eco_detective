@@ -28,15 +28,15 @@ fshYrs<-c(3,4,5)
 mcMod<-data.frame(t=0:10,
                   rlPop=c(K,rep(NA,10)))
 
-logPU<-function(df){
+logPOU<-function(df){
   
   df$Zw<-rnorm(11,mean=0,sd=1)
   for(i in 2:11){
     
-    C=ifelse(df$t %in% fshYrs,ct,0) # fishing just during the years defined
+    C=ifelse(df$t[i] %in% fshYrs,ct,0) # fishing just during the years defined
     sW<-exp(df$Zw[i]*sigW-(sigW^2)/2)
     
-    df$rlPop[i]<-sW*(df$rlPop[i-1]+r*df$rlPop[i-1]*(1-(df$rlPop[i-1]/K)-C))
+    df$rlPop[i]<-sW*(df$rlPop[i-1]+r*df$rlPop[i-1]*(1-(df$rlPop[i-1]/K))-(C*df$rlPop[i-1]))
     
   }
   
@@ -46,9 +46,157 @@ logPU<-function(df){
  return(df) 
 }
 
-modDF<-logPU(mcMod)
+modDF<-logPOU(mcMod)
 
 plot(rlPop~t,data=modDF,type="l",col="green",xlab="year",ylab="pop",ylim=c(0,max(c(rlPop,obsPop))))
 lines(obsPop~t,data=modDF, col="red")
 ```
 
+## Log likelihood calculation: Only observational uncertainty exists
+
+##### Calculate deterministic population abundances for varied r and K values
+
+Build array to calculate deterministic populations for different r (2D matrices) and K (dimension 3 of array) over the 10yrs. 
+
+```{r logLik-OU}
+
+rs=seq(0.1,0.9,by=0.1)
+Ks=seq(300,1500,by=100)
+
+nllDF<-modDF%>%
+  select(t,obsPop)
+
+rsNA<-data.frame(Nr1=rep(NA,nrow(nllDF)),
+                 Nr2=rep(NA,nrow(nllDF)),
+                 Nr3=rep(NA,nrow(nllDF)),
+                 Nr4=rep(NA,nrow(nllDF)),
+                 Nr5=rep(NA,nrow(nllDF)),
+                 Nr6=rep(NA,nrow(nllDF)),
+                 Nr7=rep(NA,nrow(nllDF)),
+                 Nr8=rep(NA,nrow(nllDF)),
+                 Nr9=rep(NA,nrow(nllDF)))
+
+nrDF<-cbind(nllDF,rsNA)
+
+### logistic model function
+
+logModLoop<-function(df,rw,ri,Ki){
+       
+  C=ifelse(df[rw,1] %in% fshYrs,ct,0) # fishing just during the years defined
+
+  determ<-(df[rw-1,2]+ri*df[rw-1,2]*(1-(df[rw-1,2]/Ki))-(C*df[rw-1,2]))
+  return(determ)
+}
+
+#########
+determ<-function(rSeq,kSeq){
+  
+  detArr<-array(numeric(),c(nrow(nllDF),length(rs)+2,length(Ks)))
+  
+  for(j in 1:length(Ks)){
+    
+    inptMx<-as.matrix(nrDF)
+    
+    for(i in 1:length(rs)){
+
+      # K<<-Ks[j]
+      # r<<-rs[i]
+      inptMx[2:nrow(nrDF),i+2]<-sapply(2:11,function(x) logModLoop(df=nrDF,rw=x,ri=rs[i],Ki=Ks[j]))
+
+    }
+    #print(inptMx)
+    detArr[,,j]<-inptMx
+  }
+return(detArr)
+}
+
+detArr<-determ(rs,Ks)
+
+```
+
+##### Calculate deviation at each time period:
+Eq. 7.36:
+$$D_t = Z\sigma_{V}$$
+
+```{r deviation}
+devFun<-function(){
+  devArr<-array(numeric(),c(nrow(nllDF),length(rs)+2,length(Ks)))
+
+  for(j in 1:length(Ks)){
+    dev<-data.frame(t=0:10,
+                    space=NA,
+                    Dr1=NA,
+                    Dr2=NA,
+                    Dr3=NA,
+                    Dr4=NA,
+                    Dr5=NA,
+                    Dr6=NA,
+                    Dr7=NA,
+                    Dr8=NA,
+                    Dr9=NA)
+    devMat<-as.matrix(dev)
+    
+  for(i in 1:length(rs)){
+    devMat[2:nrow(nrDF),i+2]<-rnorm(10)*sigV
+    
+  }
+      devArr[,,j]<-devMat
+  }
+return(devArr)
+}
+
+devArr<-devFun()
+```
+
+##### Calculate NLL at each time period:
+Eq. 7.38:
+$$L_t = log(\sigma_{V}) + \frac{1}{2}log(2\pi) + \frac{d_{t}^2}{2\sigma_{V}^2}$$
+
+```{r deviation}
+nllTFun<-function(){
+  nllTArr<-array(numeric(),c(10,length(rs),length(Ks)))
+
+  for(j in 1:length(Ks)){
+    ntd<-data.frame(Dr1=rep(NA,10),
+                    Dr2=NA,
+                    Dr3=NA,
+                    Dr4=NA,
+                    Dr5=NA,
+                    Dr6=NA,
+                    Dr7=NA,
+                    Dr8=NA,
+                    Dr9=NA)
+    nllMat<-as.matrix(ntd)
+    
+  for(i in 1:length(rs)){
+    nllMat[,i]<-sapply(1:10,function(x) log(sigV)+(1/2)*log(2*pi)+(devArr[x+1,i+2,j]^2/(2*sigV^2)))
+    
+  }
+    #print(nllMat)
+      nllTArr[,,j]<-nllMat
+  }
+return(nllTArr)
+}
+
+nllArr<-nllTFun()
+```
+
+##### Sum `nll_{t}` for all r and K combinations
+
+```{r sumNLL}
+nllDF<-data.frame(r=rs,
+                  k1=NA,
+                  k2=NA,
+                  k3=NA,
+                  k4=NA,
+                  k5=NA,
+                  k6=NA,
+                  k7=NA,
+                  k8=NA,
+                  k9=NA,
+                  k10=NA,
+                  k11=NA,
+                  k12=NA,
+                  k13=NA)
+colnames(nllDF)<-c(r,sapply(Ks,function(x) paste("K",x,sep="")))
+```
