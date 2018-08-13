@@ -198,5 +198,16 @@ nllDF<-data.frame(r=rs,
                   k11=NA,
                   k12=NA,
                   k13=NA)
-colnames(nllDF)<-c(r,sapply(Ks,function(x) paste("K",x,sep="")))
+colnames(nllDF)<-c("r",sapply(Ks,function(x) paste("K",x,sep="")))
+
+for(i in 1:length(Ks)){
+  nllDF[,i+1]<-apply(nllArr[,,i],2, sum)
+}
+
+minDims<-which(nllDF==min(nllDF),arr.ind=T)
+
+nll_r=nllDF[minDims[1],1]
+nll_k=colnames(nllDF)[13]
+
+plot(K1400~r,data=nllDF,type="l",main="K=1400",ylab="NLL")
 ```
