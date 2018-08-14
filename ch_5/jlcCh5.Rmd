@@ -91,10 +91,14 @@ ssq<-srchAry[minSSQ]
 ssq
 ```
 
+### vectorized:
+Look at Sebastian's code for making a DF with all combinations of the parameter sequence (expand.grid(Avec,Bvec,Cvec)), then calculated SSQ for each x value for each combination of parameters
+
 ### R-friendly way
 
 ```{r rFrnd5.1}
 mod1<-lm(dat$yObs~poly(dat$xVals,degree=2,raw=T))
+# or use lm(dat$yObs~dat$xVals+dat$xVals^2)
 
 summary(mod1)
 ```
@@ -197,6 +201,59 @@ regress
 
 ## Goodness of fit
 
-The first goodness of fit profile in Equation 5.5 leads to the function for optimal values for B*(A) and C\*(A) as A varies
+The first goodness of fit profile in Equation 5.5 leads to the function for optimal values for B*(A) and C\*(A) as A varies. Think about how to modify pseudocode 5.2 to do this: hold 2 parameters constant then vary the 3rd to get the best fit (minimum SSQ)
 
-...did anyone try this?
+```{r GoF}
+
+Av=seq(0,2,by=0.2)
+Bv=seq(0,2,by=0.1)
+Cv=seq(0,2,by=0.1)
+
+srchAry2<-array(data=0, dim=c(length(Av),
+                              length(Bv),
+                              length(Cv)))
+
+
+for(k in 1:length(Cv)){
+  cIn2<-Cv[k]
+  for(j in 1:length(Bv)){
+    bIn2<-Bv[j]
+    for(i in 1:length(Av)){
+      aIn2<-Av[i]
+      # print(c(aIn,bIn,cIn))
+      # print(c(i,j,k))
+        iDat2<-regress %>%
+          mutate(yPred=sapply(regress$xi,function(x) modFunc(x,aIn2,bIn2,cIn2)))%>%
+          mutate(ssqi=(yPred-yRes)^2)#%>%
+         
+        srchAry2[i,j,k]<-sum(iDat2$ssqi)
+    }
+  }
+}
+
+minSSQ<-which(srchAry2==min(srchAry2),arr.ind = T)
+Aest2<-Av[minSSQ[1]]
+Best2<-Bv[minSSQ[2]]
+Cest2<-Cv[minSSQ[3]]
+print(c(Aest2,Best2,Cest2))
+
+ssq2<-srchAry2[minSSQ]
+ssq2
+```
+
+## R - friendly Goodness of fit:
+Use MLE but have to give it the function and data to get the neg log likelihood that look like the parabola, and take the minimum value
+
+## Model Selection
+Penalize the sum of squares based on how many parameters are used:
+
+$$\frac{SSQ(m)}{n-2m}$$
+
+```{r modSel}
+
+m<-3
+modVal<-ssq2/(nrow(regress)-2*(m))
+
+modVal
+```
+
