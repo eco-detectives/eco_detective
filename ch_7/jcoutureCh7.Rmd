@@ -52,7 +52,7 @@ plot(rlPop~t,data=modDF,type="l",col="green",xlab="year",ylab="pop",ylim=c(0,max
 lines(obsPop~t,data=modDF, col="red")
 ```
 
-## Log likelihood calculation: Only observational uncertainty exists
+## Log likelihood calculation: Only *observation* uncertainty exists
 
 ##### Calculate deterministic population abundances for varied r and K values
 
@@ -119,7 +119,7 @@ Eq. 7.36:
 $$D_t = Z\sigma_{V}$$
 
 ```{r deviation}
-devFun<-function(){
+devFun<-function(uncert){
   devArr<-array(numeric(),c(nrow(nllDF),length(rs)+2,length(Ks)))
 
   for(j in 1:length(Ks)){
@@ -137,7 +137,7 @@ devFun<-function(){
     devMat<-as.matrix(dev)
     
   for(i in 1:length(rs)){
-    devMat[2:nrow(nrDF),i+2]<-rnorm(10)*sigV
+    devMat[2:nrow(nrDF),i+2]<-rnorm(10)*uncert
     
   }
       devArr[,,j]<-devMat
@@ -145,7 +145,7 @@ devFun<-function(){
 return(devArr)
 }
 
-devArr<-devFun()
+devArr<-devFun(sigV)
 ```
 
 ##### Calculate NLL at each time period:
@@ -153,7 +153,7 @@ Eq. 7.38:
 $$L_t = log(\sigma_{V}) + \frac{1}{2}log(2\pi) + \frac{d_{t}^2}{2\sigma_{V}^2}$$
 
 ```{r deviation}
-nllTFun<-function(){
+nllTFun<-function(uncert){
   nllTArr<-array(numeric(),c(10,length(rs),length(Ks)))
 
   for(j in 1:length(Ks)){
@@ -169,7 +169,7 @@ nllTFun<-function(){
     nllMat<-as.matrix(ntd)
     
   for(i in 1:length(rs)){
-    nllMat[,i]<-sapply(1:10,function(x) log(sigV)+(1/2)*log(2*pi)+(devArr[x+1,i+2,j]^2/(2*sigV^2)))
+    nllMat[,i]<-sapply(1:10,function(x) log(uncert)+(1/2)*log(2*pi)+(devArr[x+1,i+2,j]^2/(2*uncert^2)))
     
   }
     #print(nllMat)
@@ -178,13 +178,13 @@ nllTFun<-function(){
 return(nllTArr)
 }
 
-nllArr<-nllTFun()
+nllArr<-nllTFun(sigV)
 ```
 
 ##### Sum `nll_{t}` for all r and K combinations
 
 ```{r sumNLL}
-nllDF<-data.frame(r=rs,
+nllDF2<-data.frame(r=rs,
                   k1=NA,
                   k2=NA,
                   k3=NA,
@@ -198,16 +198,128 @@ nllDF<-data.frame(r=rs,
                   k11=NA,
                   k12=NA,
                   k13=NA)
-colnames(nllDF)<-c("r",sapply(Ks,function(x) paste("K",x,sep="")))
+colnames(nllDF2)<-c("r",sapply(Ks,function(x) paste("K",x,sep="")))
 
 for(i in 1:length(Ks)){
-  nllDF[,i+1]<-apply(nllArr[,,i],2, sum)
+  nllDF2[,i+1]<-apply(nllArr[,,i],2, sum)
 }
 
-minDims<-which(nllDF==min(nllDF),arr.ind=T)
+minDims<-which(nllDF2==min(nllDF2),arr.ind=T)
 
-nll_r=nllDF[minDims[1],1]
-nll_k=colnames(nllDF)[13]
+nll_r=nllDF2[minDims[1],1]
+nll_k=colnames(nllDF2)[13]
 
-plot(K1400~r,data=nllDF,type="l",main="K=1400",ylab="NLL")
+plot(K1400~r,data=nllDF2,type="l",main="K=1400",ylab="NLL-obs uncert")
+```
+
+
+## Log likelihood calculation: Only *process* uncertainty exists
+
+##### Calculate deterministic population abundances for varied r and K values
+
+Build array to calculate deterministic populations for different r (2D matrices) and K (dimension 3 of array) over the 10yrs.  
+
+```{r logLik-PU}
+
+nllDF<-modDF%>%
+  select(t,obsPop)
+
+rsNA<-data.frame(Nr1=rep(NA,nrow(nllDF)),
+                 Nr2=rep(NA,nrow(nllDF)),
+                 Nr3=rep(NA,nrow(nllDF)),
+                 Nr4=rep(NA,nrow(nllDF)),
+                 Nr5=rep(NA,nrow(nllDF)),
+                 Nr6=rep(NA,nrow(nllDF)),
+                 Nr7=rep(NA,nrow(nllDF)),
+                 Nr8=rep(NA,nrow(nllDF)),
+                 Nr9=rep(NA,nrow(nllDF)))
+
+nrDF<-cbind(nllDF,rsNA)
+
+### logistic model function
+
+logModLoopPU<-function(df,rw,ri,Ki){
+  
+  C=ifelse(df[rw,1] %in% fshYrs,ct,0) # fishing just during the years defined
+  df$Zw<-rnorm(nrow(df))
+  sW<-exp(df$Zw[rw]*sigW-(sigW^2)/2)
+
+  determ<-sW*(df[rw-1,2]+ri*df[rw-1,2]*(1-(df[rw-1,2]/Ki))-(C*df[rw-1,2]))
+  return(determ)
+}
+
+#########
+determPU<-function(rSeq,kSeq){
+  
+  detArr<-array(numeric(),c(nrow(nllDF),length(rs)+2,length(Ks)))
+  
+  for(j in 1:length(Ks)){
+    
+    inptMx<-as.matrix(nrDF)
+    
+    for(i in 1:length(rs)){
+
+      # K<<-Ks[j]
+      # r<<-rs[i]
+      inptMx[2:nrow(nrDF),i+2]<-sapply(2:11,function(x) logModLoopPU(df=nrDF,rw=x,ri=rs[i],Ki=Ks[j]))
+
+    }
+    #print(inptMx)
+    detArr[,,j]<-inptMx
+  }
+return(detArr)
+}
+
+detArrPU<-determPU(rs,Ks)
+
+```
+
+##### Calculate deviation at each time period:
+Eq. 7.40:
+$$D_t = Z\sigma_{w}$$
+
+```{r deviation-PU}
+
+devArrPU<-devFun(sigW)
+```
+
+##### Calculate NLL at each time period:
+Eq. 7.38:
+$$L_t = log(\sigma_{W}) + \frac{1}{2}log(2\pi) + \frac{d_{t}^2}{2\sigma_{W}^2}$$
+
+```{r nll-PU}
+
+
+nllArrPU<-nllTFun(sigW)
+```
+
+##### Sum `nll_{t}` for all r and K combinations
+
+```{r sumNLL-PU}
+nllDF3<-data.frame(r=rs,
+                  k1=NA,
+                  k2=NA,
+                  k3=NA,
+                  k4=NA,
+                  k5=NA,
+                  k6=NA,
+                  k7=NA,
+                  k8=NA,
+                  k9=NA,
+                  k10=NA,
+                  k11=NA,
+                  k12=NA,
+                  k13=NA)
+colnames(nllDF3)<-c("r",sapply(Ks,function(x) paste("K",x,sep="")))
+
+for(i in 1:length(Ks)){
+  nllDF3[,i+1]<-apply(nllArrPU[,,i],2, sum)
+}
+
+minDims<-which(nllDF3==min(nllDF3),arr.ind=T)
+
+nll_rPU=nllDF3[minDims[1],1]
+nll_kPU=colnames(nllDF3)[13]
+
+plot(K1400~r,data=nllDF3,type="l",main="K=1400",ylab="NLL-Proc. uncert")
 ```
