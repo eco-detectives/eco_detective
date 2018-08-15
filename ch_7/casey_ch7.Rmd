@@ -7,7 +7,7 @@ output:
     toc: true
     toc_depth: 3
     toc_float: yes
-    number_sections: true
+    number_sections: false
     theme: cerulean
     highlight: haddock
     includes: 
@@ -25,7 +25,7 @@ source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
 
 ```
 
-$\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}} \newcommand{\L}{\mathscr{L}} \newcommand{\LL}{\mathscr{l}}$
+$\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}}$ $\newcommand{\L}{\mathscr{L}} \newcommand{\LL}{\mathscr{l}}$
 
 # Chapter 7: The Confrontation: Likelihood and Maximum Likelihood
 
@@ -108,4 +108,264 @@ ggplot(df, aes(x = year, y = N, color = type)) +
   geom_line()
 
 ```
+
+## Pseudocode 7.2
+
+Use a systematic search to identify "best fit" parameters to minimize negative log likelihood.
+
+1. Input data values for observed pop size with only observation uncertainty, no process uncertainty.
+2. For specified values of $r,K$ systematically search over individual $r,K$ values and generate predicted deterministic pop sizes using eq. 7.32.
+    * $N_{t+1} = N_t + rN_t \left(1 - \frac{N_t}{K}\right) - C_t$
+3. Calc the deviation at each time period using eq. 7.36.
+4. Calc neg log-likelihood of deviations using eq. 7.38.
+5. Sum $\l_t$ over $t$ to obtain neg log likelihood for this combination of $r, K$.
+6. See which values of $r, K$ lead to smallest total log likelihood.
+
+``` {r generate N vec with only obs uncertainty} 
+r <- 0.5
+K <- 1000
+sigma_V <- 0.1
+
+n_years <- 10
+N_vec <- vector(length = n_years + 1)
+N_vec[1] <- K
+
+for(i in 1:n_years) { ### i <- 1
+  N_t <- N_vec[i]
+
+  ### calc harvest for this step: 50% in years 3, 4, 5; 0 else
+  C_t <- ifelse(i %in% 3:5, 0.5 * N_t, 0)
+  
+  N_vec[i + 1] <- (N_t + r * N_t * (1 - N_t / K) - C_t)
+  
+}
+
+### Since observed count is independent of process uncertainty, we can just
+### apply the observation uncertainty after the fact more easily.
+V_vec <- exp(rnorm(length(N_vec), mean = 0, sd = sigma_V) - sigma_V^2 / 2)
+N_obs <- N_vec * V_vec
+
+```
+
+``` {r} 
+r_vec <- seq(-.5, 1, 0.05)
+K_vec <- seq(100, 5000, 100)
+t_vec <- 1:10
+sigma_W <- 0.1
+sigma_V <- 0.1
+
+n_years <- 10
+
+### use N_obs from previous chunk
+NLL_mat <- matrix(NA, nrow = length(r_vec), ncol = length(K_vec))
+
+for(i in seq_along(r_vec)) { ### i <- 1
+  r <- r_vec[i]
+  for(j in seq_along(K_vec)) { ### j <- 1
+    K <- K_vec[j]
+    
+    ### for this set of r, K, calculate the deterministic N time series
+    N_vec <- vector(length = n_years + 1)
+    N_vec[1] <- K
+    for(k in 1:n_years) { ### i <- 1
+      N_t <- N_vec[k]
+
+      ### calc harvest for this step: 50% in years 3, 4, 5; 0.01 else
+      C_t <- ifelse(k %in% 3:5, 0.5 * N_t, 0.01 * N_t)
+      
+      N_vec[k + 1] <- N_t + r * N_t * (1 - N_t / K) - C_t
+    }    
+    ### then calc the neg log likelihood
+    
+    d_vec <- log(N_obs) - log(N_vec)
+    nll <- sum(log(sigma_V) + .5 * log(2* pi) + d_vec^2/(2 * sigma_V^2))
+    
+    NLL_mat[i, j] <- nll
+  }
+}
+
+best_fit <- which(NLL_mat == min(NLL_mat), arr.ind = TRUE)
+r_best <- r_vec[best_fit[1]]
+K_best <- K_vec[best_fit[2]]
+
+r_best; K_best
+```
+
+``` {r}
+
+N_vec <- vector(length = n_years + 1)
+N_vec[1] <- K_best
+for(k in 1:n_years) { ### i <- 1
+  N_t <- N_vec[k]
+
+  ### calc harvest for this step: 50% in years 3, 4, 5; 0.01 else
+  C_t <- ifelse(k %in% 3:5, 0.5 * N_t, 0.01 * N_t)
+  
+  N_vec[k + 1] <- N_t + r_best * N_t * (1 - N_t / K_best) - C_t
+}
+
+df <- data.frame(t = 1:(n_years + 1),
+                 observed = N_obs,
+                 deterministic = N_vec) %>%
+  gather(type, N, -t)
+
+ggplot(df, aes(x = t, y = N, color = type)) +
+  geom_line() +
+  geom_point() +
+  ggtheme_plot() +
+  xlim(0, 11) + ylim(0, NA)
+```
+
+## Pseudocode 7.3
+
+Use a systematic search to identify "best fit" parameters to minimize negative log likelihood.
+
+1. Input data values for observed pop size with only observation uncertainty, no process uncertainty.
+2. For specified values of $r,K$ systematically search over individual $r,K$ values and generate predicted deterministic pop sizes using eq. 7.39.
+    * $N_{t+1} = W_t \{ N_t + rN_t \left(1 - \frac{N_t}{K}\right) - C_t \}$
+3. Calc the deviation at each time period using eq. 7.36.
+4. Calc neg log-likelihood of deviations using eq. 7.38.
+5. Sum $\l_t$ over $t$ to obtain neg log likelihood for this combination of $r, K$.
+6. See which values of $r, K$ lead to smallest total log likelihood.
+
+``` {r generate N vec with only process uncertainty} 
+r <- 0.5
+K <- 1000
+sigma_V <- 0.1
+
+n_years <- 10
+N_vec <- vector(length = n_years + 1)
+N_vec[1] <- K
+
+for(i in 1:n_years) { ### i <- 1
+  N_t <- N_vec[i]
+
+  W_t <- exp(rnorm(1, mean = 0, sd = sigma_W) - sigma_W^2 / 2)
+  
+  C_t <- ifelse(i %in% 3:5, 0.5 * N_t, 0)
+  
+  N_vec[i + 1] <- W_t * (N_t + r * N_t * (1 - N_t / K) - C_t)
+  
+}
+
+N_obs <- N_vec ### no obs uncertainty
+
+```
+
+``` {r} 
+r_vec <- seq(-.5, 1, 0.05)
+K_vec <- seq(100, 5000, 100)
+t_vec <- 1:10
+
+n_years <- 10
+
+### use N_obs from previous chunk
+NLL_mat <- matrix(NA, nrow = length(r_vec), ncol = length(K_vec))
+
+for(i in seq_along(r_vec)) { ### i <- 1
+  r <- r_vec[i]
+  for(j in seq_along(K_vec)) { ### j <- 1
+    K <- K_vec[j]
+    
+    ### for this set of r, K, calculate the deterministic N time series
+    N_vec <- vector(length = n_years + 1)
+    N_vec[1] <- K
+    for(k in 1:n_years) { ### i <- 1
+      N_t <- N_vec[k]
+
+      ### calc harvest for this step: 50% in years 3, 4, 5; 0.01 else
+      C_t <- ifelse(k %in% 3:5, 0.5 * N_t, 0.01 * N_t)
+      
+      N_vec[k + 1] <- N_t + r * N_t * (1 - N_t / K) - C_t
+    }    
+    ### then calc the neg log likelihood
+    
+    d_vec <- log(N_obs) - log(N_vec)
+    nll <- sum(log(sigma_W) + .5 * log(2* pi) + d_vec^2/(2 * sigma_W^2))
+    
+    NLL_mat[i, j] <- nll
+  }
+}
+
+best_fit <- which(NLL_mat == min(NLL_mat), arr.ind = TRUE)
+r_best <- r_vec[best_fit[1]]
+K_best <- K_vec[best_fit[2]]
+
+r_best; K_best
+```
+
+``` {r}
+
+N_vec <- vector(length = n_years + 1)
+N_vec[1] <- K_best
+for(k in 1:n_years) { ### i <- 1
+  N_t <- N_vec[k]
+
+  ### calc harvest for this step: 50% in years 3, 4, 5; 0.01 else
+  C_t <- ifelse(k %in% 3:5, 0.5 * N_t, 0.01 * N_t)
+  
+  N_vec[k + 1] <- N_t + r_best * N_t * (1 - N_t / K_best) - C_t
+}
+
+df <- data.frame(t = 1:(n_years + 1),
+                 observed = N_obs,
+                 deterministic = N_vec) %>%
+  gather(type, N, -t)
+
+ggplot(df, aes(x = t, y = N, color = type)) +
+  geom_line() +
+  geom_point() +
+  ggtheme_plot() +
+  xlim(0, 11) + ylim(0, NA)
+```
+
+
+## Some code ideas to try later
+
+``` {r, eval = FALSE}
+# r_K_t_df<- tidyr::crossing(r = r_vec, K = K_vec, t = t_vec)
+
+### https://stackoverflow.com/questions/38983532/dplyr-iterative-calculation
+### In general, if you want to calculate values that rely on previous values, 
+### you are better off using Reduce. here's an example with your data
+### 
+### x %>% mutate(x3 = Reduce(function(a,b) a*1.1+1, 1:(n()-1), 0, acc=T))
+### But in your example, there is a closed form for the term that doesn't 
+### rely on iteration. You can do
+### 
+### x %>% mutate(x4=(1.1^(row_number()-1)-1)/(1.1-1)*1)
+
+
+# x <- data.frame(x1 = c(1:10)) 
+# 
+# #This works.
+# x$x2[1] <- 0
+# 
+# for (i in 2:nrow(x)) {
+#   x$x2[i] <- x$x2[i-1]*1.1 + 1
+# }
+# 
+# x <- x %>% mutate(x3 = Reduce(function(a, b) a*1.1+1, 1:(n()-1), 0, acc=T))
+
+
+# library(dplyr)
+# library(magrittr)
+# x <- data.frame(x1 = c(1:10))
+# f_x <- function(x){(x-1)*1.1+1}
+# x$x2 <-x %$% x1 %>% f_x
+#     
+#     
+# N_det <- function(N_lag, r, K, harvest) {
+#   N = N_lag + r * N_lag * (1 - N_lag / K) - harvest * N_lag
+# }
+# 
+# N_df <- r_K_t_df %>%
+#   group_by(r, K) %>%
+#   mutate(harvest = ifelse(t %in% 3:5, 0.50, 0.01)) %>%
+#   mutate(N = Map(f = N_det, r, K, harvest))
+
+
+
+```
+
 
