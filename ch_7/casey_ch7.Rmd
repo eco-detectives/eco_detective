@@ -23,6 +23,8 @@ knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
 
 source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
 
+set.seed(1)
+
 ```
 
 $\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}}$ $\newcommand{\L}{\mathscr{L}} \newcommand{\LL}{\mathscr{l}}$
@@ -294,7 +296,7 @@ K_best <- K_vec[best_fit[2]]
 r_best; K_best
 ```
 
-``` {r}
+``` {r 7.3}
 
 N_vec <- vector(length = n_years + 1)
 N_vec[1] <- K_best
@@ -319,6 +321,129 @@ ggplot(df, aes(x = t, y = N, color = type)) +
   xlim(0, 11) + ylim(0, NA)
 ```
 
+## Pseudocode 7.4
+
+``` {r 7.4}
+q <- 1
+r <- 0.03
+p <- -3
+lambda <- 3
+
+df <- data.frame(D = 1:20) %>%
+  rowwise() %>%
+  mutate(I_det = max(0, (p + q * D) / (1 + r * D))) %>%
+  ungroup() %>%
+  mutate(obs = rpois(n(), I_det))
+
+mdl <- lm(obs ~ D, data = df)
+
+obs_plot <- ggplot(df, aes(x = D, y = obs)) +
+  ggtheme_plot() +
+  geom_abline(intercept = mdl$coefficients[1], slope = mdl$coefficients[2], color = 'blue') +
+  geom_line(aes(y = I_det), color = 'red') +
+  geom_point(size = 2) +
+  labs(x = 'True abundance',
+       y = 'Observed')
+
+obs_plot
+```
+
+## Pseudocode 7.5
+
+To calc neg log likelihood of a given observation, start with likelihood $\L$:
+
+$$\L(\lambda | k = obs) = P(k = obs | \lambda) = \frac{\lambda^{k} e^{-\lambda}}{k!}$$
+then neg log likelihood:
+$$\LL\{\lambda | k\} = -(-\lambda \ln(e) + k \ln(\lambda) - \ln(k!))$$
+$$= \lambda - k\ln(\lambda)  + \ln(k!)$$
+In this, $\lambda$ is our predicted value $I_{det}$ for each model.  Since the last term is independent of $\lambda$, we could just drop it - it is the same for each model, so drops out in the math later because we're looking at differences between the models.  But we can just calculate it and keep it in, why not?
+
+``` {r 7.5}
+
+q <- 1
+r <- 0.03
+p <- -3
+lambda <- 3
+
+nsims <- 1000
+
+best_model <- vector(length = nsims)
+
+for(sim in 1:nsims) { ### sim <- 1
+  
+  ### to avoid singular results, let's use a while loop, creating a
+  ### new set of observations until the nls() models are NOT singular
+  singular <- TRUE
+  while(singular) {
+    ### generate a new random set of observations
+    obs_df <- data.frame(D = 1:20) %>%
+      rowwise() %>%
+      mutate(I_det = max(0, (p + q * D) / (1 + r * D))) %>%
+      ungroup() %>%
+      mutate(obs = rpois(n(), I_det))
+    
+    ### generate params for each model
+    singular <- FALSE
+    mdl_a_ls <- lm(obs ~ 0 + D, data = obs_df) %>% coefficients
+    mdl_b_ls <- lm(obs ~ 1 + D, data = obs_df) %>% coefficients
+    mdl_c_ls <- tryCatch(expr = {nls(obs ~ (a * D)/(1 + b * D), 
+                                      start = c('a' = p, 'b' = r), 
+                                      data = obs_df) %>% coefficients},
+             error = function(e) TRUE)
+    mdl_d_ls <- tryCatch(expr = {nls(obs ~ (w + a * D)/(1 + b * D),
+                                     start = c('w' = p, 'a' = q, 'b' = r),
+                                     data = obs_df) %>% coefficients},
+             error = function(e) TRUE)
+    singular <- any(mdl_c_ls == TRUE, mdl_d_ls == TRUE)
+  }
+  ### generate df for each model
+  mdl_a_df <- data.frame(D = 1:20) %>%
+    rowwise() %>%
+    mutate(I_det = max(0, mdl_a_ls[1] * D),
+           model = 'A') %>%
+    ungroup()
+  mdl_b_df <- data.frame(D = 1:20) %>%
+    rowwise() %>%
+    mutate(I_det = max(0, mdl_b_ls[1] + mdl_b_ls[2] * D),
+           model = 'B') %>%
+    ungroup()
+  mdl_c_df <- data.frame(D = 1:20) %>%
+    rowwise() %>%
+    mutate(I_det = max(0, mdl_c_ls[1] * D / (1 + mdl_c_ls[2] * D)),
+           model = 'C') %>%
+    ungroup()
+  mdl_d_df <- data.frame(D = 1:20) %>%
+    rowwise() %>%
+    mutate(I_det = max(0, (mdl_d_ls[1] + mdl_d_ls[2] * D) / (1 + mdl_d_ls[3] * D)),
+           model = 'D') %>%
+    ungroup()
+  
+  ### bind models and add column of observed values
+  mdl_df <- bind_rows(mdl_a_df, mdl_b_df, mdl_c_df, mdl_d_df) %>%
+    mutate(obs = rep(obs_df$obs, 4)) %>%
+    mutate(nll = I_det - obs * log(I_det) + log(factorial(obs)) )
+  
+  mdl_compare <- mdl_df %>%
+    group_by(model) %>%
+    summarize(sum_nll = sum(nll, na.rm = TRUE))
+  nll_vec <- mdl_compare$sum_nll %>% setNames(mdl_compare$model)
+  
+  ### a little testing to figure out which model is the best... ugh
+  a_test <- c('B' = 2 * (nll_vec['A'] - nll_vec['B']) < qchisq(.95, df = 1), ### 1 dof
+              'C' = 2 * (nll_vec['A'] - nll_vec['C']) < qchisq(.95, df = 1), ### 1 dof
+              'D' = 2 * (nll_vec['A'] - nll_vec['D']) < qchisq(.95, df = 2)) ### 2 dof
+  b_test <- c('C' = nll_vec['B'] < nll_vec['C'],
+              'D' = 2 * (nll_vec['B'] - nll_vec['D']) < qchisq(.95, df = 1)) ### 1 dof
+  c_test <- 2 * (nll_vec['C'] - nll_vec['D']) < qchisq(.95, df = 1) ### 1 dof
+  best_model[sim] <- case_when(all(a_test) ~ 'A',
+                               all(b_test) ~ 'B',
+                               all(c_test) ~ 'C',
+                               TRUE        ~ 'D')
+}
+
+table(best_model)
+
+```
 
 ## Some code ideas to try later
 
