@@ -343,15 +343,31 @@ r=0.03
 p=-3
 D=1
 
-schnt<-data.frame(D=1:20) %>%
-  mutate(index=ifelse((p+q*D)/(1+r*D)>=0,(p+q*D)/(1+r*D),0)) %>%
-  mutate(obs=sapply(.$index,function(x) x+rpois(1,1)))
-  
-trueMod<-lm(obs~D,schnt)
+# schnt<-data.frame(D=1:20) %>%
+#   mutate(index=ifelse((p+q*D)/(1+r*D)>=0,(p+q*D)/(1+r*D),0)) %>%
+#   mutate(obs=sapply(.$index,function(x) x+rpois(1,1))) # CO thinks that the pseudocode was wrong and instead of adding uncertainty with the poisson, we should be using the poisson distribtuion to make the data
 
-plot(obs~D,data=schnt)
-lines(D~D,data=schnt)
-abline(trueMod,lty=2)
+df <- data.frame(D = 1:20) %>%
+  rowwise() %>%
+  mutate(I_det = max(0, (p + q * D) / (1 + r * D))) %>%
+  ungroup() %>%
+  mutate(obs = rpois(n(), I_det))
+
+trueMod<-lm(obs~D,data=df)
+
+# plot(obs~D,data=df)
+# lines(D~D,data=df)
+# abline(lty=2)
+
+obs_plot <- ggplot(df, aes(x = D, y = obs)) +
+  #ggtheme_plot() +
+  geom_abline(intercept = trueMod$coefficients[1], slope = trueMod$coefficients[2], color = 'blue') +
+  geom_line(aes(y = I_det), color = 'red') +
+  geom_point(size = 2) +
+  labs(x = 'True abundance',
+       y = 'Observed')
+
+obs_plot
 ```
 
 ## Likelihoods to compare models
