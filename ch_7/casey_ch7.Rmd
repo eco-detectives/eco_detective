@@ -365,7 +365,7 @@ r <- 0.03
 p <- -3
 lambda <- 3
 
-nsims <- 1000
+nsims <- 200
 
 best_model <- vector(length = nsims)
 
@@ -428,7 +428,18 @@ for(sim in 1:nsims) { ### sim <- 1
     summarize(sum_nll = sum(nll, na.rm = TRUE))
   nll_vec <- mdl_compare$sum_nll %>% setNames(mdl_compare$model)
   
-  ### a little testing to figure out which model is the best... ugh
+  ### a little testing to figure out which model is the best... ugh.  
+  ### For each model test, compare the model to the others using a likelihood
+  ### ratio test.  As set up, each named vector element is a likelihood
+  ### ratio test against the variable in the object name.  E.g. a_test['C']
+  ### is the result of a likelihood ratio test between models A and C,
+  ### with a TRUE indicating A came out ahead and FALSE indicating that A
+  ### did not come out ahead.
+  ### So, if A came out ahead against all three other models, then A is the
+  ### winner.  If not, go to b_test, and if B came out ahead of C and D (since
+  ### we already tested it against A), then B is the winner.  Then to C,
+  ### against D, and if none of the other tests was a clear winner, then D
+  ### wins.
   a_test <- c('B' = 2 * (nll_vec['A'] - nll_vec['B']) < qchisq(.95, df = 1), ### 1 dof
               'C' = 2 * (nll_vec['A'] - nll_vec['C']) < qchisq(.95, df = 1), ### 1 dof
               'D' = 2 * (nll_vec['A'] - nll_vec['D']) < qchisq(.95, df = 2)) ### 2 dof
@@ -441,9 +452,116 @@ for(sim in 1:nsims) { ### sim <- 1
                                TRUE        ~ 'D')
 }
 
+best_model <- factor(best_model, levels = c('A', 'B', 'C', 'D'))
+  ### convert to factor, with level C included, so we see C even if C = 0
+
 table(best_model)
 
 ```
+
+## Pseudocode 7.6: infested nuts
+
+Sampling pistachios to determine the proportion infested.  If 10% or fewer out of population are infested, then we're good.  With true infestation rate $f$, and on a sample size $S$, infested count $I$ in sample follows binomial distribution:
+$$\Pr(I = i|f) = \binom{S}{i} f^i (1-f)^{S - i}$$
+
+And neg log likelihood becomes
+$$\LL(S, i |f) = -i \log f - (S - i) log(1-f) + J$$
+Setting derivative of neg log likelihood with respect to f:
+$$\frac{\partial \LL}{\partial f} = -\frac{i}{f} + \frac{S - i}{1 - f} = 0$$
+$$\Rightarrow i - if = fS - if \Rightarrow f_{MLE} = \frac{i}{S}$$
+
+OK now that the infrastructure is out of the way... Find 95% confidence interval by looking at log likelihood profile, and all values with a likelihood of 1.92 of MLE estimator.
+$$\LL(S, i | f) - \LL(f_{MLE} | S, i) = 1.92$$
+just a positive check, since the first term will always be higher NLL than the second, since $\LL(f_{MLE}|S, i)$ should be the minimum of a convex profile.  Besides, we are looking for the upper bound.
+
+Pseudocode suggests a sequential sampling technique - sampling 20 at a time, until we reach an upper bound $f_b$ (upper 95% confidence interval) that is 0.10 or less. Why sequential?  we can just sample a ton, but if we do a few smaller samples, maybe we can stop sampling earlier and go home.
+
+Let's run a few simulations, each with different random samples, and see how many iterations it takes on average to achieve an acceptable target threshold $f_{b,95\%}$ for the given $f, S$ values.
+
+``` {r} 
+# set.seed(12345) ### set seed for reproducibility
+
+n_sims <- 1000
+sims_list <- vector('list', n_sims)
+
+f <- 0.04 
+  ### set true infestation rate; has to be *below* threshold
+  ### to provide reasonable certainty of reaching a 95% conf int
+  ### that is still below our threshold for acceptance.
+f_b_thresh <- 0.10 ### set acceptance threshold
+samp_size <- 20 ### number chosen per sample
+
+for(sim in 1:n_sims) { ### sim <- 1
+  
+  S_tot <- 0 ### initialize S and i total values
+  i_tot <- 0
+  f_b   <- 1 ### initialize boundary infestation rate well above threshold
+  j     <- 0 ### initialize index for counting samples
+  
+  while(f_b > f_b_thresh) { ### 
+    j <- j + 1
+    I <- rbinom(n = 1, size = samp_size, prob = f)
+    S_tot <- S_tot + samp_size
+    i_tot <- i_tot + I
+    
+    f_MLE <- i_tot/S_tot
+    
+    if(f_MLE == 0) next()
+      ### if f_MLE == 0, then we run into errors with logs.
+    
+    L_f_MLE <- -i_tot * log(f_MLE) - (S_tot - i_tot) * log(1 - f_MLE)
+      ### drop J term since cancels in difference
+    L_f <- L_f_MLE + 1.92
+      ### this is our target; solve for f that meets this value.
+    
+    ### How to solve for f?  can do by plugging in a bunch of f values
+    ### and calculating L_f from the -i log(f) - (S - i) log(1 - f)
+    ### ... otherwise some ugly log math
+    
+    ### set a vector from f_MLE up to 1, knowing that we are looking
+    ### for the bound ABOVE f_MLE.
+    f_vec <- seq(f_MLE, 1, .001)
+  
+    L_f_vec <- -i_tot * log(f_vec) - (S_tot - i_tot) * log(1 - f_vec)
+    f_b_indx <- min(which(L_f_vec > L_f))
+      ### We want the first value that *exceeds* the NLL(f_MLE) + 1.92
+      ### (to be)
+    
+    f_b <- f_vec[f_b_indx]
+    
+    if(j > 1000) break()
+      ### to avoid an infinite loop...
+    
+    tmp_df <- data.frame(sim = sim,
+                         samples = j,
+                         S_total = S_tot,
+                         I_total = i_tot,
+                         f_MLE = f_MLE,
+                         f_b = f_b)
+  } ### end of iterations for this sim
+  
+  sims_list[[sim]] <- tmp_df
+    ### don't forget double brackets, dammit
+}
+### Setting f (true value) to 0.10 gave an unreasonably large
+### number of iterations to converge, or got stuck in an infinite loop.
+### What value did the book code set? Closer to 0.04 (4 infected
+### out of 100 samples)
+
+sims_df <- bind_rows(sims_list)
+
+ggplot(sims_df, aes(x = samples)) +
+  ggtheme_plot() +
+  geom_histogram(binwidth = 1, center = 0,
+                 color = 'grey30', fill = 'grey50') +
+  xlim(0, NA) +
+  labs(x = paste0('Number of samples (sample size = ', samp_size, ')'),
+       y = paste0('frequency out of ', n_sims, ' simulations'))
+
+# DT::datatable(sims_df)
+
+```
+
 
 ## Some code ideas to try later
 
