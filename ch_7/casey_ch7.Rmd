@@ -4,7 +4,7 @@ author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
 output: 
   html_document:
     code_folding: hide
-    toc: true
+    toc: FALSE
     toc_depth: 3
     toc_float: yes
     number_sections: false
@@ -23,13 +23,11 @@ knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
 
 source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
 
-set.seed(1)
-
 ```
 
 $\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}}$ $\newcommand{\L}{\mathscr{L}} \newcommand{\LL}{\mathscr{l}}$
 
-# Chapter 7: The Confrontation: Likelihood and Maximum Likelihood
+# Chapter 7: The Confrontation: Likelihood and Maximum Likelihood{.tabset}
 
 Minimizing sum of squares requires no assumptions about the distribution of error/uncertainty.  But if we have an idea about the probability distribution of uncertainty, we can use the maximum likelihood method.  This allows us to put confidence bounds on parameters, which we cannot do with sum of squares.
 
@@ -323,11 +321,15 @@ ggplot(df, aes(x = t, y = N, color = type)) +
 
 ## Pseudocode 7.4
 
+Ecological scenario of observing animals and inferring the true abundance from observations with error.  Use an index
+
+$$I = \max\left(0, \frac{p + qD}{1 + rD}\right) \hspace{20pt} (\text{eqn }7.43)$$
+where $q$ is a proportionality constant - observed animals is proportional to abundance; $p$ allows for possibility that we may falsely observe the target species even if not present ($p > 0$) or miss observing target species even when present ($p < 0$); and $r$ allows for non-linearity between index and true abundance.
+
 ``` {r 7.4}
 q <- 1
 r <- 0.03
 p <- -3
-lambda <- 3
 
 df <- data.frame(D = 1:20) %>%
   rowwise() %>%
@@ -363,7 +365,6 @@ In this, $\lambda$ is our predicted value $I_{det}$ for each model.  Since the l
 q <- 1
 r <- 0.03
 p <- -3
-lambda <- 3
 
 nsims <- 200
 
@@ -559,6 +560,199 @@ ggplot(sims_df, aes(x = samples)) +
        y = paste0('frequency out of ', n_sims, ' simulations'))
 
 # DT::datatable(sims_df)
+
+```
+
+## Pseudocode 7.7, jesus does this chapter ever end?
+
+Going back to our abundance index eqn 7.43:
+$$I = \max\left(0, \frac{p + qD}{1 + rD}\right)$$
+We want to find the likelihood profile for $q$, by finding the values of $p,r$ that maximize likelihood for each possible value of $q$.  The text and figure 7.9 are probably based on values from 7.5: $q = 1, p = -3, r = .03$.
+
+Neg log likelihood (from pseudocode 7.5 above):
+$$\LL = \lambda - k\ln(\lambda)  + \ln(k!)$$
+In this, $\lambda$ is our predicted value $I_{det}$ for each model, and $k$ is our $I_{obs}$. However, the $\log()$ term causes issues when $\lambda \leq 0$.  From the numerator of the $I_{det}$, $p + qD$, we can tell that this will happen when $p$ is negative and product $qD$ is small (i.e. $q$ is low, and/or $D$ is low).
+
+So: calculate NLL by only summing non-NA terms.  This seems problematic... and this problem is apparent in jumpiness of the plot at low $q$ values, since we're comparing sums with different numbers of terms.  Could create a false impression of the min of one of those jumps is large (i.e. a high number of NAs).  Other possibilities - gapfill NAs with a mean value, or just take the mean (rather than the sum) of the non-NA terms?
+
+``` {r pseudocode 7.7 part A}
+### generate observation data frame: same as in 7.4
+q <- 1; r <- .03; p <- -3
+
+D_vec <- 1:20
+
+obs_df <- data.frame(D = D_vec) %>%
+  rowwise() %>%
+  mutate(I_det = max(0, (p + q * D) / (1 + r * D))) %>%
+  ungroup() %>%
+  mutate(obs = rpois(n(), I_det))
+
+### option a: use true values of p and r
+q_vec <- seq(.5, 5, .05)
+nll_vec_a <- vector('numeric', length(q_vec))
+for(i in seq_along(q_vec)) { ### i <- 1
+  q_test <- q_vec[i]
+  p_test <- p; r_test <- r
+  
+  nll_df <- obs_df %>%
+    rowwise() %>%
+    mutate(lambda = (p_test + q_test * D) / (1 + r_test * D),
+           nll = lambda - obs * log(lambda) + log(factorial(obs))) %>%
+    ungroup()
+  
+  nll_vec_a[i] <- sum(nll_df$nll, na.rm = TRUE)
+}
+
+# plot(q_vec, nll_vec_a)
+```
+
+``` {r pseudocode 7.7 part B}
+### Option B: instead of using known p and r, search for best p and r for
+### this value of q_test.  We probably don't need to know what those optimal
+### p and r values are...
+q_vec <- seq(.5, 5, .05)
+
+p_vec <- seq(-7, +1, .25)    ### range around p = -3
+r_vec <- seq(-.05, +.15, .01) ### range around r = 0.03
+
+### initialize vector of NLL values for each element of q_vec
+nll_vec_b <- vector('numeric', length(q_vec))
+
+for(i in seq_along(q_vec)) { ### i <- 1
+  q_test <- q_vec[i]
+  message('q_test: ', q_test, '... ' )
+  
+  nll_min <- Inf ### initialize a very high NLL for this value of q_test
+  for(j in seq_along(p_vec)) {
+    p_test <- p_vec[j]
+    for(k in seq_along(r_vec)) {
+      r_test <- r_vec[k]
+      
+      nll_df <- obs_df %>%
+        rowwise() %>%
+        mutate(lambda = (p_test + q_test * D) / (1 + r_test * D),
+               nll = lambda - obs * log(lambda) + log(factorial(obs))) %>%
+        ungroup()
+      
+      nll_sum <- sum(nll_df$nll, na.rm = TRUE)
+      
+      if(nll_sum < nll_min) {
+        ### this combo of p_test and r_test creates a lower NLL than prior
+        ### combos, so this is now the lowest.
+        nll_min <- nll_sum
+      }
+    } ### end of r_vec loop
+  }   ### end of p_vec loop
+  
+  nll_vec_b[i] <- nll_min
+  
+} ### end of q_vec loop
+
+# plot(q_vec, nll_vec_b)
+
+```
+
+``` {r plot the two results}
+
+nll_df <- data.frame(q = q_vec,
+                 a = nll_vec_a,
+                 b = nll_vec_b) %>%
+  gather(test, NLL, a, b) %>%
+  filter(NLL < 100)
+ggplot(nll_df, aes(x = q, y = NLL, color = test)) +
+  ggtheme_plot() +
+  geom_point()
+
+```
+
+This doesn't look all that much like Figure 7.8... but test A ($r$ and $p$ fixed at actual values) stays narrow compared to finding optimal $r$ and $p$ for each $q$.  Perhaps the pseudocode intends us to use the same data as in Table 7.1?  but I generated new random data for this anyway.
+
+## Pseudocode 7.8 - apparently, no
+
+The pseudocode says to use data from Table 7.1, but we will just generate random data.
+
+We will assume $p = 0, r = 0$ and bootstrap to find estimates of $q$... though the data is not based on these values of $p, r$... so we run it again with true values and see how it does.  In both cases, I use the mean, rather than the sum, to help avoid issues where we get artificially low NLL values b/c lots of NAs.
+
+### using r = p = 0
+
+``` {r pseudocode 7.8}
+### generate observation data frame: same as in 7.4
+q <- 1; r <- .03; p <- -3
+
+D_vec <- 1:20
+
+obs_df <- data.frame(D = D_vec) %>%
+  rowwise() %>%
+  mutate(I_det = max(0, (p + q * D) / (1 + r * D))) %>%
+  ungroup() %>%
+  mutate(obs = rpois(n(), I_det))
+
+sims <- 1000
+
+p_test <- 0; r_test <- 0
+q_vec <- seq(.5, 1.5, .025)
+
+q_est_vec <- rep(NA, sims)
+
+for(sim in 1:sims) { ### sim <- 1
+  if(sim%%25 == 0) message('bootstrap sim: ', sim)
+  bs_df <- sample_n(obs_df, size = nrow(obs_df), replace = TRUE)
+  
+  nll_vec_bs <- vector('numeric', length(q_vec))
+  for(i in seq_along(q_vec)) { ### i <- 2
+    q_test <- q_vec[i]
+
+    nll_df <- bs_df %>%
+      rowwise() %>%
+      mutate(lambda = (p_test + q_test * D) / (1 + r_test * D),
+             nll = lambda - obs * log(lambda) + log(factorial(obs))) %>%
+      ungroup()
+    
+    nll_vec_bs[i] <- mean(nll_df$nll, na.rm = TRUE)
+  }
+  q_est_vec[sim] <- q_vec[which(nll_vec_bs == min(nll_vec_bs))]
+}
+
+bs_results_df <- data.frame(sim = 1:sims,
+                            q_est = q_est_vec)
+
+ggplot(bs_results_df, aes(x = q_est)) +
+  geom_histogram(binwidth = 0.025, color = 'grey30', fill = 'cyan3')
+```
+
+### using known r and p
+
+``` {r try again using known parameters r and p}
+
+p_test <- p; r_test <- r
+q_vec <- seq(.5, 1.5, .025)
+
+q_est_vec <- rep(NA, sims)
+
+for(sim in 1:sims) { ### sim <- 1
+  if(sim%%25 == 0) message('bootstrap sim: ', sim)
+  bs_df <- sample_n(obs_df, size = nrow(obs_df), replace = TRUE)
+  
+  nll_vec_bs <- vector('numeric', length(q_vec))
+  for(i in seq_along(q_vec)) { ### i <- 2
+    q_test <- q_vec[i]
+
+    nll_df <- bs_df %>%
+      rowwise() %>%
+      mutate(lambda = (p_test + q_test * D) / (1 + r_test * D),
+             nll = lambda - obs * log(lambda) + log(factorial(obs))) %>%
+      ungroup()
+    
+    nll_vec_bs[i] <- mean(nll_df$nll, na.rm = TRUE)
+  }
+  q_est_vec[sim] <- q_vec[which(nll_vec_bs == min(nll_vec_bs))]
+}
+
+bs_results_df <- data.frame(sim = 1:sims,
+                            q_est = q_est_vec)
+
+ggplot(bs_results_df, aes(x = q_est)) +
+  geom_histogram(binwidth = 0.025, color = 'grey30', fill = 'cyan3') 
 
 ```
 
