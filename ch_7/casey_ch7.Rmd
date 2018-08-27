@@ -575,9 +575,11 @@ In this, $\lambda$ is our predicted value $I_{det}$ for each model, and $k$ is o
 
 So: calculate NLL by only summing non-NA terms.  This seems problematic... and this problem is apparent in jumpiness of the plot at low $q$ values, since we're comparing sums with different numbers of terms.  Could create a false impression of the min of one of those jumps is large (i.e. a high number of NAs).  Other possibilities - gapfill NAs with a mean value, or just take the mean (rather than the sum) of the non-NA terms?
 
+In this version I changed p to be positive, to unambiguously avoid this whole problem.
+
 ``` {r pseudocode 7.7 part A}
 ### generate observation data frame: same as in 7.4
-q <- 1; r <- .03; p <- -3
+q <- 1; r <- .03; p <- 3
 
 D_vec <- 1:20
 
@@ -588,7 +590,7 @@ obs_df <- data.frame(D = D_vec) %>%
   mutate(obs = rpois(n(), I_det))
 
 ### option a: use true values of p and r
-q_vec <- seq(.5, 5, .05)
+q_vec <- seq(.1, 5, .05)
 nll_vec_a <- vector('numeric', length(q_vec))
 for(i in seq_along(q_vec)) { ### i <- 1
   q_test <- q_vec[i]
@@ -610,9 +612,9 @@ for(i in seq_along(q_vec)) { ### i <- 1
 ### Option B: instead of using known p and r, search for best p and r for
 ### this value of q_test.  We probably don't need to know what those optimal
 ### p and r values are...
-q_vec <- seq(.5, 5, .05)
+q_vec <- seq(.1, 5, .05)
 
-p_vec <- seq(-7, +1, .25)    ### range around p = -3
+p_vec <- seq(0, 6, .25)    ### range around p = -3
 r_vec <- seq(-.05, +.15, .01) ### range around r = 0.03
 
 ### initialize vector of NLL values for each element of q_vec
@@ -661,7 +663,8 @@ nll_df <- data.frame(q = q_vec,
   filter(NLL < 100)
 ggplot(nll_df, aes(x = q, y = NLL, color = test)) +
   ggtheme_plot() +
-  geom_point()
+  geom_point() +
+  geom_line()
 
 ```
 
@@ -677,7 +680,7 @@ We will assume $p = 0, r = 0$ and bootstrap to find estimates of $q$... though t
 
 ``` {r pseudocode 7.8}
 ### generate observation data frame: same as in 7.4
-q <- 1; r <- .03; p <- -3
+q <- 1; r <- .03; p <- 3
 
 D_vec <- 1:20
 
