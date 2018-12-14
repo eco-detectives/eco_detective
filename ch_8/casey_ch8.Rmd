@@ -1,0 +1,329 @@
+---
+title: 'Eco-Detectives: chapter 8'
+author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
+output: 
+  html_document:
+    code_folding: hide
+    toc: FALSE
+    toc_depth: 3
+    toc_float: yes
+    number_sections: false
+    theme: cerulean
+    highlight: haddock
+    includes: 
+      in_header: '~/github/src/templates/ohara_hdr.html'
+  pdf_document:
+    toc: true
+---
+
+``` {r setup, echo = TRUE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
+
+source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
+
+```
+
+$\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}}$ $\newcommand{\L}{\mathscr{L}} \newcommand{\LL}{\mathscr{L}}$
+
+# Chapter 8: Conservation biology of wildebeest in the Serengeti{.tabset}
+
+## Pseudocode 8.1: Logistic Model
+
+To determine best values of $r$ and $K$ (based on regular-year rainfall)
+
+* input census data up to 1978 (means and std devs)
+* Input starting estimates of params $r$, $K$, $N_1$
+* Find vals of params that minimize neg log likelihood by these steps:
+    * Predict values of $N_t$ from eq. 8.2: $$N_{t+1} = N_t + rN_t(1 - N_t/K)$$
+    * For years in which census data are available, calc neg log likelihood using 8.4: $$\LL_t = \log(\sigma_t) + \frac{1}{2}\log 2\pi + \frac{(N_{obs,t} - N_t)^2}{2 \sigma_t^2}$$
+    * Sum neg log likelihoods
+    * Minimize total sum of neg log likelihoods over $r$ and $K$.
+    
+```{r set up functions for 8.1}
+
+calc_logistic <- function(N_t, r, K) {
+  N_t_1 <- N_t + r * N_t * (1 - N_t / K)
+  return(N_t_1)
+}
+
+calc_est_logistic <- function(N1, r, K, yrs) {
+  N_vec <- vector(length = yrs)
+  for(i in 1:yrs) {
+    if(i == 1) {
+      N_vec[i] <- N1
+    } else {
+      N_vec[i] <- calc_logistic(N_vec[i - 1], r, K)
+    }
+  }
+  return(N_vec)
+}
+
+calc_nll_logistic <- function(sigma, N_obs, N_est) {
+  ### pass vector of N_obs and N_est
+  nll <- log(sigma) + .5 * log(2*pi) + (N_obs - N_est)^2 / (2 * sigma^2)
+  return(sum(nll, na.rm = TRUE))
+}
+
+sum_nll_logistic <- function(par, N1, obs_data) {
+  r <- par[1]; K <- par[2]
+  ### create a vector of N_est
+  N_est_vec <- calc_est_logistic(N1, r, K, yrs = nrow(obs_data))
+  ### calc nll of this vector vs model
+  sum_nll <- calc_nll_logistic(obs_data$N_sd, obs_data$N_mean, N_est_vec)
+}
+
+```
+
+```{r set up numerical optimization}
+observed_data <- read_csv('data/wildebeest_data.csv') %>%
+  setNames(c('year', 'rain', 'N_mean', 'N_sd', 'M_adult', 'M_calf')) %>%
+  mutate(N_sd = ifelse(is.na(N_sd) & year < 1970, 0.3 * N_mean, N_sd))
+    ### assume CV before 1970 is 0.3, from page 186.
+
+early_data <- observed_data %>%
+  filter(year <= 1978 & year != 1960)
+
+### choose some starting values
+r_vec  <- seq(.05, .15, .001) ### should be about 0.10
+N1_vec <- first(early_data$N_mean)
+K_vec  <- c(10^seq(3, 10, 0.05)) 
+  ### should be around 3.5e9 (thousand)! wtf
+
+params_df <- crossing(N1_vec, r_vec, K_vec) %>%
+  setNames(c('N1', 'r', 'K'))
+
+nll_df <- params_df %>%
+  rowwise() %>%
+  mutate(nll = sum_nll_logistic(par = c(r, K), N1, early_data)) %>%
+  ungroup()
+
+```
+
+Well OK those params don't quite match the book's estimates (i.e. doesn't max out at K = 3.5e9).  Here's what I get: $N_1 = N_{1961} = 263; r = 0.103$; let's just use $K = 3.5e9$ (essentially infinity - we're just in exponential growth, not density-dependent growth here).
+
+### using optim()
+```{r set up optim}
+
+### choose some starting values
+r1 <- .05
+N1 <- first(early_data$N_mean)
+K1 <- 5000
+
+z <- optim(par = c(r = r1, K = K1), fn = sum_nll_logistic, N1 = N1, obs_data = early_data)
+
+z$par
+```
+
+### Fig. 8.4
+
+```{r}
+n_plot_df <- early_data %>%
+  mutate(N_est = calc_est_logistic(263, 0.103, 3.5e9, nrow(.)))
+
+ggplot(n_plot_df, aes(x = year)) +
+  geom_point(aes(y = N_mean)) +
+  geom_line(aes(y = N_est)) +
+  ggtheme_plot()
+```
+
+### Fig. 8.5 contour plot
+
+```{r}
+ggplot(nll_df %>% filter(K <= 10000), aes(x = K, y = r, z = nll)) +
+  geom_contour(aes(colour = stat(level))) +
+  ggtheme_plot() +
+  scale_color_viridis_c()
+
+```
+
+not sure why my plotted smooth and the book's is rough.  I call shenanigans - maybe just an artifact from the authors' optimization function?  since I did it numerically might be smoother?
+
+## Pseudocode 8.2
+
+* Input rainfall, census, calf surv, adult mort data and N1 up to 1978
+* Input starting params of $a, b, f, g$
+* Find values of params that minimize NLL by:
+    * predict vals of $N_t$ and calf and adult survival from eq 8.10 (see below)
+    * calc NLL for census data using single year terms in eq 8.11 (see below)
+    * summing nll over all years
+    * minimizing total sum
+
+eq 8.11:
+\begin{align*}
+  \LL_{\text{total}} &= \LL_{\text{census}} + \LL_{\text{calf survival}} + \LL_{\text{adult mortality}}\\
+  \LL_{\text{census}} &= \sum_t \frac{(N_t - N_{obs,t})^2}{2 \sigma_1^2}\\
+  \LL_{\text{calf survival}} &= \sum_t \frac{(s_{calf,t} - s_{calf,obs,t})^2}{2 \sigma_2^2}\\
+  \LL_{\text{adult mortality}} &= \sum_t \frac{(M_{adult,t} - M_{adult,obs,t})^2}{2 \sigma_3^2}
+\end{align*}
+
+Population dynamics including rainfall $R$, and accounting for survival of calves and adults.
+
+\begin{align*}
+  T_t &= 1.25 R_t &\text{Food ~ rain (kg/ha-mo), eqn 8.5}\\
+  F_t &= \frac{T_t A}{N_t} &\text{Food per animal, eqn 8.6}\\
+  B_t &= 0.4N_t            &\text{Births, eqn 8.7}\\
+  s_{calf,t}  &= \frac{aF_t}{b+F_t} &\text{Calf surv. ~ food, eqn 8.8}\\
+  s_{adult,t} &= \frac{gF_t}{f+F_t} &\text{Adult surv. ~ food, eqn 8.9}\\[12pt]
+  N_{t+1} &= (s_{adult,t})N_t + (s_{calf,t})B_t;\\
+  N_{obs,t} &= N_t + V_t  &\text{Pop dynamics, eqn 8.10}\\[12pt]
+  N_{t+1} &= N_t \left(\frac{g (1.25R_t/N_t)}{f + 1.25R_t/N_t}\right)
+      + 0.4N_t \left(\frac{a (1.25R_t/N_t)}{b + 1.25R_t/N_t}\right)
+      &\text{Pop dynamics, eqn 8.12}
+\end{align*}
+
+
+```{r}
+calc_8_12 <- function(par, R_t, N_t) {
+  a <- par[1]; b <- par[2]; f <- par[3]; g <- par[4]
+  
+  N_t1 <- N_t * (g * 1.25 * R_t / N_t) / (f + 1.25 * R_t / N_t) + 
+    0.4 * N_t * (a * 1.25 * R_t / N_t) / (b + 1.25 * R_t / N_t)
+  
+  return(as.numeric(N_t1))
+}
+
+calc_est_8_12 <- function(par, data_df) {
+  N_vec  <- vector('numeric', length = nrow(data_df)) ### population
+  sc_vec <- vector('numeric', length = nrow(data_df)) ### calf surv
+  sa_vec <- vector('numeric', length = nrow(data_df)) ### adult surv
+  for(i in seq_along(N_vec)) { 
+    ### i <- 2
+    if(i == 1) {
+      N_vec[i] <- data_df$N_mean[1]
+    } else {
+      N_vec[i] <- calc_8_12(par, R_t = data_df$rain[i-1], N_t = N_vec[i-1])
+        ### use last period's N and rain to determine this period's N
+    }
+    
+  }
+  
+  ### with rain and N vectors, calc survival for calf and adult
+  F_t <- 1.25 * data_df$rain * 1e6 / N_vec ### hard code area = 1e6 ha
+  a <- par[1]; b <- par[2]; f <- par[3]; g <- par[4]
+  sc_vec <- a * F_t / (b + F_t)
+  sa_vec <- g * F_t / (f + F_t)
+  
+  df <- data_df %>%
+    mutate(N_est   = N_vec,
+           s_calf  = sc_vec,
+           s_adult = sa_vec)
+  return(df)
+}
+
+calc_nll_8_12 <- function(par, data_df) {
+  ### check parameters are positive; else return NA.  This is
+  ### a way to force the optim() function to stay within constraints.
+  ### Can also look into constrOptim()?
+  ### NOTE: changed lower bound to .001 instead of zero, just to
+  ### see if it improves smoothness by eliminating weird tiny numeric BS
+  if(all(par > 0.001) & par[2] >= 0.1) {
+    ### all OK; use params to estimate N, s_calf, s_adult, and bind to data_df
+    df <- calc_est_8_12(par, data_df)
+    
+    if(any(df$N_est <= 0)) {
+      ### constrain population estimates to be positive
+      return(NA)
+    }
+    
+    ### operate on the vectors of each parameter in the data frame
+    nll_census <- (df$N_est - df$N_mean)^2 / (2 * df$N_sd^2)
+    nll_calf   <- ((1 - df$s_calf) - df$M_calf)^2 / (2 * df$sd_calf^2)
+      ### calf mortality is 1 - survival
+    nll_adult  <- ((1 - df$s_adult^.25) - df$M_adult)^2 / (2 * df$sd_adult^2)
+      ### adult mortality is measured per month of dry season, so the estimate
+      ### of M_{adult,t} = 1 - (s_{adult,t})^.25 per page 195.
+    
+    ### the values won't line up by year, but summing across all
+    ### non-NA values should still give us a minimizable value.
+    nll_sum <- sum(c(nll_census, nll_calf, nll_adult), na.rm = TRUE)
+    
+    return(nll_sum)
+  } else {
+    return(NA)
+  }
+}
+
+```
+
+### Optimize parameters
+
+```{r}
+
+observed_data <- read_csv('data/wildebeest_data.csv') %>%
+  setNames(c('year', 'rain', 'N_mean', 'N_sd', 'M_adult', 'M_calf')) %>%
+  mutate(N_sd = ifelse(is.na(N_sd) & year < 1970, 0.3 * N_mean, N_sd))
+    ### assume CV before 1970 is 0.3, from page 186.
+
+early_data <- observed_data %>%
+  filter(year <= 1978 & year != 1960) %>%
+  mutate(sd_adult = sd(early_data$M_adult, na.rm = TRUE),
+         sd_calf  = sd(early_data$M_calf, na.rm = TRUE))
+
+z_df <- data.frame()
+for(p in seq(.15, .75, .01)) {
+  
+  init_pars <- c(a = p, b = p, f = p, g = p)
+  
+  tmp <- optim(par = init_pars, fn = calc_nll_8_12, data_df = early_data)
+  
+  tmp_df <- data.frame(par_init = p,
+                       a = tmp$par[1],
+                       b = tmp$par[2],
+                       f = tmp$par[3],
+                       g = tmp$par[4],
+                       val = tmp$value)
+  z_df <- bind_rows(z_df, tmp_df)
+}
+
+ggplot(z_df, aes(x = par_init, y = val)) + geom_line()
+
+```
+
+Note that the optimized parameters seem _very_ noisy and/or sensitive to the starting parameters.  
+
+### Fig. 8.6
+
+``` {r}
+
+### Sort by lowest-highest, and take the 10 minimum values for comparison
+opt_param_df <- z_df %>%
+  arrange(val) %>%
+  .[1:10, ]
+optimized_df <- lapply(1:10, FUN = function(j) { # j <- 1
+    par <- as.numeric(opt_param_df[j, 2:5])
+    y <- calc_est_8_12(par, early_data) %>%
+      mutate(par_init = opt_param_df[j, 1])
+  }) %>%
+  bind_rows()
+
+ggplot(optimized_df, aes(x = year, color = par_init)) +
+  geom_line(aes(y = N_est, group = par_init), alpha = .5) +
+  geom_point(aes(y = N_mean), color = 'grey20') +
+  scale_color_viridis_c() +
+  ggtheme_plot()
+
+```
+
+### Solve for equil population
+
+Solving for equilibrium pop ($N_{t+1} = N_t = N_{eq}$):
+$$N_{eq} = \frac{-b' + \sqrt{b'^2 - 4a'c'}}{2a'}$$
+where $a' = bf, b' = 1.25R(b+f-gb-0.4af), c' = (1.25R)^2(1-g-0.4a)$.
+
+``` {r find equil pop}
+
+R_eq <- 150 ### dry year equilibrium
+
+N_eq_df <- opt_param_df %>%
+  mutate(a1 = b * f,
+         b1 = 1.25 * R_eq * (b + f - g*b - 0.4*a*f),
+         c1 = (1.25 * R_eq)^2 * (1 - g - 0.4*a),
+         N_eq = (-b1 + sqrt(b1^2 - 4*a1*c1)) / (2*a1)) %>%
+  select(par_init, a, b, f, g, N_eq)
+
+knitr::kable(N_eq_df)
+```
+
+According to these sets of optimized parameters, the 150mm rainfall equilibrium pop will be anywhere from 1.5 to 4.1 million (if params lower bound is 0; brings values in significantly if lower bound on params is 0.001 as is done here).  The text says 1.8 million.  Since the text does not provide any insights on the optimal params (except for their constraints), tough to compare.  
