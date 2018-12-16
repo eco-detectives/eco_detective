@@ -258,8 +258,8 @@ observed_data <- read_csv('data/wildebeest_data.csv') %>%
 
 early_data <- observed_data %>%
   filter(year <= 1978 & year != 1960) %>%
-  mutate(sd_adult = sd(early_data$M_adult, na.rm = TRUE),
-         sd_calf  = sd(early_data$M_calf, na.rm = TRUE))
+  mutate(sd_adult = sd(M_adult, na.rm = TRUE),
+         sd_calf  = sd(M_calf, na.rm = TRUE))
 
 z_df <- data.frame()
 for(p in seq(.15, .75, .01)) {
@@ -316,14 +316,88 @@ where $a' = bf, b' = 1.25R(b+f-gb-0.4af), c' = (1.25R)^2(1-g-0.4a)$.
 
 R_eq <- 150 ### dry year equilibrium
 
+calc_equil_pop <- function(a, b, f, g, R_eq) {
+  a1 = b * f
+  b1 = 1.25 * R_eq * (b + f - g*b - 0.4*a*f)
+  c1 = (1.25 * R_eq)^2 * (1 - g - 0.4*a)
+  N_eq = (-b1 + sqrt(b1^2 - 4*a1*c1)) / (2*a1)
+  return(N_eq)
+}
+
 N_eq_df <- opt_param_df %>%
-  mutate(a1 = b * f,
-         b1 = 1.25 * R_eq * (b + f - g*b - 0.4*a*f),
-         c1 = (1.25 * R_eq)^2 * (1 - g - 0.4*a),
-         N_eq = (-b1 + sqrt(b1^2 - 4*a1*c1)) / (2*a1)) %>%
-  select(par_init, a, b, f, g, N_eq)
+  mutate(N_eq = calc_equil_pop(a, b, f, g, R_eq))
 
 knitr::kable(N_eq_df)
+
+# mean(N_eq_df$a) # [1] 0.6610326
+# sd(N_eq_df$a) # 0.002714316   CV(a) = .0041
+# mean(N_eq_df$g) # [1] 0.9566868
+# sd(N_eq_df$g) # 0.0001680789   CV(g) = .00018
+# mean(N_eq_df$b) # [1] 0.1873177
+# sd(N_eq_df$b) # 0.04675319   CV(b) = .25
+# mean(N_eq_df$f) # [1] 0.005027211
+# sd(N_eq_df$f) # 0.004957489   CV(f) = .99
 ```
 
 According to these sets of optimized parameters, the 150mm rainfall equilibrium pop will be anywhere from 1.5 to 4.1 million (if params lower bound is 0; brings values in significantly if lower bound on params is 0.001 as is done here).  The text says 1.8 million.  Since the text does not provide any insights on the optimal params (except for their constraints), tough to compare.  
+
+Note that $a$ and $g$ params seem pretty consistent, but the $f$ and $b$ terms are all over the place.  What if we fixed $a$ and $g$ and then re-optimized?
+
+**NOTE:** still pretty unstable.  `constrOptim()` maybe?
+
+## Pseudocode 8.3 Confidence in N_eq
+
+Want to find the likelihood profile of our equilibrium population $N_{eq}$ (carrying capacity).  It's not a parameter of our model, so we can't just calc MLE for different values.  Instead, we constrain the estimation procedure to find values of $a, b, f, g$ that maximize the likelihood given a specific equil pop.  To do this, set a penalty based on the target equil pop and the calculated equil pop with those parameters:
+$$P(N_{eq}, N_{target}) = \frac{(N_{eq} - N_{target})^{\gamma}}{M}$$
+where $\gamma$ and $M$ are params used to set the size of the penalty.  Then, maximize the sum of the three likelihoods plus the penalty.  In effect, find best fit constrained so that the equil pop is very close to $N_{target}$.
+
+* Input rainfall, census, calf survival, and adult mort data.
+* Input starting estimates of params $a, b, f, g$.
+* Input a range of vals of $N_{target}$ over which to search.
+* Loop over vals of $N_{target}$ and find param vals that minimize sum of NLL plus penalty function.
+    * here we *minimize* $\sum$NLL plus penalty, not maximize?
+* Plot NLL vs $N_{target}$.
+    * without penalty?
+
+```{r}
+
+observed_data <- read_csv('data/wildebeest_data.csv') %>%
+  setNames(c('year', 'rain', 'N_mean', 'N_sd', 'M_adult', 'M_calf')) %>%
+  mutate(N_sd = ifelse(is.na(N_sd) & year < 1970, 0.3 * N_mean, N_sd))
+    ### assume CV before 1970 is 0.3, from page 186.
+
+early_data <- observed_data %>%
+  filter(year <= 1978 & year != 1960) %>%
+  mutate(sd_adult = sd(M_adult, na.rm = TRUE),
+         sd_calf  = sd(M_calf, na.rm = TRUE))
+
+R_eq <- 150
+gamma <- 2
+M <- 100
+
+calc_nll_w_penalty <- function(par, data_df, N_target, M, gamma) {
+  nll_raw <- calc_nll_8_12(par, data_df)
+  N_eq <- calc_equil_pop(par[1], par[2], par[3], par[4], R_eq)
+  penalty <- (N_eq - N_target)^gamma / M
+
+  return(nll_raw + penalty)
+}
+
+
+init_pars <- c(.3, .3, .3, .3)
+
+N_target_vec <- seq(500, 3000, 100)
+N_eq_likelihood_df <- data.frame()
+for(N_target in N_target_vec) {
+  ### N_target <- N_target_vec[1]
+  z <- optim(par = init_pars, fn = calc_nll_w_penalty, 
+             data_df = early_data, N_target = N_target, M = M, gamma = gamma)
+  tmp_df <- data.frame(N_target = N_target,
+                       nll_optim = calc_nll_8_12(z$par, early_data))
+  N_eq_likelihood_df <- N_eq_likelihood_df %>% bind_rows(tmp_df)
+}
+
+ggplot(N_eq_likelihood_df, aes(x = N_target, y = nll_optim)) +
+  geom_line()
+```
+
