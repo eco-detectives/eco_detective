@@ -1,0 +1,142 @@
+---
+title: 'Ch8: Conservation Biology of Wildebeests in the Serengeti'
+author: "Jessica Couture"
+date: "1/23/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## The "questions":
+
+"In this chapter we consider two questions that correspond to two periods of examination of the wildebeest population trends and sepcific questions considered important in those periods. First
+- in 1978 when the herd first exceeded 1 million individiuals,   there was serious **concern about the population if a series of dry years should occur.**
+Second,  
+- in the early 1990s, population size had leveled but was subject to considerable illegal harvest. **Managers were interested in determining the level of harvest and the potential response of the herd to increases in such uncontrolled harvest.**  
+Answering these questions shows how likelihood methods can be used to select between different models, how different sources of data can be combined through models based on observation uncertainty and how data may be informative of not depending upon the particular questions we ask."
+
+```{r pkgs}
+library(tidyverse)
+library(ggplot2)
+```
+
+# Logistic model
+We begin with the logistic model, equation 8.2, with observation uncertainty and use the census data available in 1978.  
+$$N_{t+1}=N_t+rN_t\left(1-\frac{N_t}{K}\right)$$  
+Use equation 8.4 to determine the best values of *r* and *K*:
+$$L_t=log(\sigma_t)+\frac{1}{2}log(2\pi)+\frac{(N_{obs,t}-N_{t})^2}{2\sigma_{t}^2}$$
+
+1. Input census data up to 1978 (means and standard deviations)
+```{r data, echo=FALSE}
+wld<-read_csv("data/wildebeest_data.csv")
+colnames(wld)<-c("year","dryRain","estPop","estSD","adltDryMort","calfSurv")
+range(wld$year)
+
+wld1<-wld%>%
+  filter(year<1979)%>%
+  select(year,estPop,estSD)
+
+head(wld1)
+```
+
+2. Input starting estimates of the parameters *r*, *K*,*$N_1$*
+```{r startParams}
+r=0.05
+K=2.0*10^9
+N1=300
+
+```
+
+3. Find the values fo the parameters that minimize the negaitve log-likelihood by:  
+a) predicting the values of $N_t$ from equation 8.2
+```{r calcNt}
+Nt<-as.numeric()
+Nt[1]<-N1
+for(i in 1:nrow(wld1)){
+  Nt[i+1]<-Nt[i]+r*Nt[i]*(1-(Nt[i]/K))
+}
+ntDf<-data.frame(year=wld1$year,
+                 N=Nt[1:nrow(wld1)])
+
+plot(ntDf)
+```
+
+b) calculating the negative log-likelihood using equation 8.4 for years in which census data are available
+
+```{r logLik}
+wld1Dat<-wld1%>%
+  filter(!is.na(estPop)) %>%
+  filter(!is.na(estSD)) %>%
+  left_join(.,ntDf) %>%
+  mutate(Lt=log(estSD)+(1/2)*log(2*pi)+((estPop-N)/((2*estSD)^2)))
+
+```
+
+c) summing the negative log likelihoods over all years
+
+```{r totNll}
+sumL<-sum(wld1Dat$Lt)
+```
+
+d) minimizing the total sum of negative log likelihoods over r and K
+
+```{r}
+#funcitonalize nll calcs:
+nllCalc<-function(rR,Kk){
+  
+  Nt<-as.numeric()
+  Nt[1]<-N1
+  
+  for(i in 1:nrow(wld1)){
+  Nt[i+1]<-Nt[i]+rR*Nt[i]*(1-(Nt[i]/Kk))
+  }
+  ntDf<-data.frame(year=wld1$year,
+                 N=Nt[1:nrow(wld1)])
+  
+  wld1Dat<-wld1%>%
+  filter(!is.na(estPop)) %>%
+  filter(!is.na(estSD)) %>%
+  left_join(.,ntDf) %>%
+  mutate(Lt=log(estSD)+(1/2)*log(2*pi)+((estPop-N)/((2*estSD)^2)))
+  nll<-sum(wld1Dat$Lt)
+  return(nll)
+  }
+
+rVec<-seq(r,0.5,by=0.01)
+KVec<-seq(K,4.0*10^9,by=1.25*10^8)
+
+nlls<-data.frame(r=rVec,
+                  k1=NA,
+                  k2=NA,
+                  k3=NA,
+                  k4=NA,
+                  k5=NA,
+                  k6=NA,
+                  k7=NA,
+                  k8=NA,
+                  k9=NA,
+                  k10=NA,
+                  k11=NA,
+                  k12=NA,
+                  k13=NA,
+                  k14=NA,
+                  k15=NA,
+                  k16=NA,
+                  k17=NA)
+colnames(nlls)<-c("r",sapply(KVec,function(x) paste("K",x,sep="")))
+
+for(i in 1:length(KVec)){
+  forVec<-sapply(rVec,function(x) nllCalc(x,KVec[i]))
+  nlls[,i+1]<-forVec[1:length(forVec)]
+}
+
+minDims<-which(nlls==min(nlls[,2:ncol(nlls)]),arr.ind=T)
+# 
+# nll_rPU=nllDF3[minDims[1],1]
+# nll_kPU=colnames(nllDF3)[13]
+# 
+# plot(nllDF3[,minDims[2]]~nllDF3$r,data=nllDF3,type="l",main=colnames(nllDF3)[minDims[2]],ylab="NLL-Proc. uncert",xlab="r")
+```
+
