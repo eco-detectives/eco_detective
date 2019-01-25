@@ -70,7 +70,7 @@ wld1Dat<-wld1%>%
   filter(!is.na(estPop)) %>%
   filter(!is.na(estSD)) %>%
   left_join(.,ntDf) %>%
-  mutate(Lt=log(estSD)+(1/2)*log(2*pi)+((estPop-N)/((2*estSD)^2)))
+  mutate(Lt=log(estSD)+(1/2)*log(2*pi)+(((estPop-N)^2)/((2*estSD)^2)))
 
 ```
 
@@ -83,6 +83,10 @@ sumL<-sum(wld1Dat$Lt)
 d) minimizing the total sum of negative log likelihoods over r and K
 
 ```{r}
+wld1Dat2<-wld1%>%
+  filter(!is.na(estPop)) %>%
+  filter(!is.na(estSD))
+
 #funcitonalize nll calcs:
 nllCalc<-function(rR,Kk){
   
@@ -90,23 +94,23 @@ nllCalc<-function(rR,Kk){
   Nt[1]<-N1
   
   for(i in 1:nrow(wld1)){
-  Nt[i+1]<-Nt[i]+rR*Nt[i]*(1-(Nt[i]/Kk))
+    Nt[i+1] <- Nt[i] + rR*Nt[i]*(1-(Nt[i]/Kk))
   }
   ntDf<-data.frame(year=wld1$year,
                  N=Nt[1:nrow(wld1)])
   
-  wld1Dat<-wld1%>%
-  filter(!is.na(estPop)) %>%
-  filter(!is.na(estSD)) %>%
+dat<-wld1Dat2%>%
   left_join(.,ntDf) %>%
-  mutate(Lt=log(estSD)+(1/2)*log(2*pi)+((estPop-N)/((2*estSD)^2)))
-  nll<-sum(wld1Dat$Lt)
+  mutate(Lt=log(estSD)+(1/2)*log(2*pi)+(((estPop-N)^2)/((2*estSD)^2)))
+  nll<-sum(dat$Lt)
   return(nll)
   }
 
+# create vectors for r and K
 rVec<-seq(r,0.5,by=0.01)
-KVec<-seq(K,4.0*10^9,by=1.25*10^8)
+KVec<-seq(1.0*10^9,4.0*10^9,by=2.5*10^8)
 
+# dataframe for r and K values
 nlls<-data.frame(r=rVec,
                   k1=NA,
                   k2=NA,
@@ -120,11 +124,7 @@ nlls<-data.frame(r=rVec,
                   k10=NA,
                   k11=NA,
                   k12=NA,
-                  k13=NA,
-                  k14=NA,
-                  k15=NA,
-                  k16=NA,
-                  k17=NA)
+                  k13=NA)
 colnames(nlls)<-c("r",sapply(KVec,function(x) paste("K",x,sep="")))
 
 for(i in 1:length(KVec)){
@@ -133,10 +133,10 @@ for(i in 1:length(KVec)){
 }
 
 minDims<-which(nlls==min(nlls[,2:ncol(nlls)]),arr.ind=T)
-# 
-# nll_rPU=nllDF3[minDims[1],1]
-# nll_kPU=colnames(nllDF3)[13]
-# 
-# plot(nllDF3[,minDims[2]]~nllDF3$r,data=nllDF3,type="l",main=colnames(nllDF3)[minDims[2]],ylab="NLL-Proc. uncert",xlab="r")
+
+nll_r=nlls[minDims[1],1]
+nll_k=colnames(nlls)[minDims[2]]
+ 
+plot(nlls[,minDims[2]]~nlls$r,data=nlls,type="l",main=colnames(nlls)[minDims[2]],ylab="NLL",xlab="r")
 ```
 
