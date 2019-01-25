@@ -82,7 +82,7 @@ sumL<-sum(wld1Dat$Lt)
 
 d) minimizing the total sum of negative log likelihoods over r and K
 
-```{r}
+```{r message=FALSE}
 wld1Dat2<-wld1%>%
   filter(!is.na(estPop)) %>%
   filter(!is.na(estSD))
@@ -146,8 +146,35 @@ plot(nlls[,minDims[2]]~nlls$r,data=nlls,type="l",main=colnames(nlls)[minDims[2]]
 
 Given the data available in 1978, there is a better chance of understanding what is likely to happen if rainfall decreases after 1978 if we use the information contained in the calf survival and adult survival data. To do this, we confront the life history model (with parameters *a, b, f,* and *g*) with the census, calf survival, and adult mortality data using the following code:  
 1. Input rainfall, census, calf survival, and adult mortality data and $N_1$ up to 1978
+2. Input starting parameters for *a, b, f*, and *g*.
 ```{r survDat}
 wld2<-wld%>%
   filter(year<1979)
+
+a=1.1
+b=1.1
+f=1.1
+g=1.1
+
+```
+
+3. Find the values of the parameters that minimize the negaitve log likelihood by:
+A) Predicting the values of $N_t$ and calf and adult survival fron equation 8.10:
+$$N_{t+1}=(s_{adult,t})N_t+(s_{calf,t})B_t$$
+$$N_{obs,t}=N_t+V_t$$
+where $s_{adult,t}=\frac{gF_t}{f+F_t}$, $F_t=\frac{1.25R_t*Area}{N_t}$, and $s_{calf,t}=\frac{aF_t}{b+F_t}$, and $B_t=0.4N_t$
+```{r eq8.10}
+
+  A=1000000
+
+expPop<-function(rain,N){
+
+  Tt=1.25*rain
+  Ft=(Tt*A)/Nt
+  Bt=0.4*N
+  
+  sA=(g*Ft)/(f+Ft)
+}
+
 ```
 
