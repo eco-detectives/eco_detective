@@ -1,0 +1,142 @@
+---
+title: 'Chapter 8: Conservation Biology of the Wildbeest in  the Serengeti'
+author: "Ignacia Rivera"
+date: "January 23, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(here)
+library(dplyr)
+library(tidyr)
+library(DescTools)
+```
+
+
+### The 1978 question
+#### What happens with the wildbeest population once rainfall returns to normal (150 mm/year rather than 250 mm/year) ? 
+
+##### *Competing hypotheses:*
+
+1. The herd will collapse.
+2. The herd will not collapse.
+
+##### *Equations:*
+
+1. Population growth - Logistic model
+
+$$ N_{t+1} = N_t + rN_t ( 1 - \frac{N_t}{K})$$
+
+2. We assume observation error
+
+$$ N_{obs,t} = N_t + V_t$$ where $V_t$ is normally distirbuted with mean 0 and sd $\sigma_t$
+
+3. Total food per ha ($T_t$)
+
+$$T_t= 1.25 R_t $$
+Where $R_t$ is the total dry season rainfall (in mm).
+
+
+4. Food per animal ($F_t$)
+ 
+ $$ F_t = \frac{T_t A}{N_t}$$
+ 
+5. Births in a year ($B_t$)
+ 
+ $$ B_t = 0.4 N_t$$
+6. Survival Calf in a year ($s_{c, t}$)
+
+$$ s_{c, t} = \frac{aF_t}{b+F_t} $$
+
+Where $a \le 1$ is the maximum value of calf survival and $b$ is the value of food per individual at which survival is 50% of $a$. 
+
+7. Survival Adult in a year ($s_{a, t}$)
+
+$$ s_{a, t} = \frac{qF_t}{f+F_t} $$
+
+Where $q \le 1$ is the maximum value of calf survival and $f$ is the value of food per individual at which survival is 50% of $a$. 
+
+##### *Life histoy model:*
+
+$$N_{t+1} = (s_{a, t})N_t + (s_{c, t})B_t $$
+$$N_{t+1} = N_t (\frac{g 1.25 R_t/N_t}{f + 1.25R_t/N_t}) + 0.4 N_t(\frac{a 1.25R_t/N_t}{b + 1.25R_t/N_t})$$
+
+
+At equilibirum: 
+
+$$ N_{eq} = \frac{-b' + \sqrt{(b')^2 - 4a'c'}}{2a'}$$ where $a' = bf, b'= 1.25R (b+f-gb -0.4af)$, and $c' = (1.25)^2(1-g-0.4a)$
+
+Adding harvesting after 1997:
+
+$$  N_{t+1 = }\left\{
+        \begin{array}{ll}
+            (s_{a, t})N_t + (s_{c, t})B_t  & \quad t < 1977 \\
+            (s_{a, t})N_t + (s_{c, t})B_t - h_t  & \quad t \geq 1977
+        \end{array}
+    \right.
+$$
+
+#### *Finding the best values for $r$ and $K$* 
+
+Assuming the logistic model and observation uncertainty, and using the census data available in 1978.
+
+```{r pseudocode 8.1}
+
+# Initial parameters
+R <- c(seq(from= 0.5, to=1, by= 0.25))
+K <- c(seq(from= 300000, to = 3000000, by = 1000000))
+N.0 <- 263000
+years <- 1978- 1975
+
+# Function that predicts based on logistic model and initial parameters
+
+pred.pop.size <- function(R, K, N.0, years){
+
+# Predicting Nt based on logistic model
+  
+## storing vector
+pred.pop <- array(data= NA, dim=c(years, length(K), length(R)))
+## setting starting year
+pred.pop[1, , ] <- N.0
+
+for (r in 1:length(R)) {
+  
+    for (y in 2:years)    {
+    
+      N.t.1 <- pred.pop[y-1, ,r] + R[r]*pred.pop[y-1, ,r] * (1-(pred.pop[y-1, ,r]/K)) #logistic growth
+
+      pred.pop[y, , r] <- N.t.1
+
+  }
+  
+} 
+
+return(pred.pop)
+
+}
+
+pred.pop <- pred.pop.size(R, K, N.0, years)
+
+# Calculating NLL for years with existing data for pop size estimate and standard deviation
+
+# Data
+census <- read.csv(here("ch_8/data/wildebeest_data.csv"))
+colnames(census) <- c('year', 'rain', 'pop', 'sd', 'adult_mortality', 'calf_survival')
+
+pop <- census %>% #dataframe with pop estimates and sigma per year
+  filter(year < 1979 & pop != 'NA') %>% 
+  mutate(sigma = ifelse(is.na(sd), 0.3, sd)) %>% 
+  select(year, pop, sigma)
+
+# Filttering years with estimates
+
+pred.pop[,4 , ] <- years
+pop <- pop %>%  
+  left_join(pred.pop) %>% 
+  mutate(nll = log(sigma) + 0.5* log(pi) + ((pop - pred.pop)^2)/(2*sigma^2))
+
+
+
+```
