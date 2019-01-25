@@ -140,3 +140,14 @@ nll_k=colnames(nlls)[minDims[2]]
 plot(nlls[,minDims[2]]~nlls$r,data=nlls,type="l",main=colnames(nlls)[minDims[2]],ylab="NLL",xlab="r")
 ```
 
+***
+
+# Life History Model
+
+Given the data available in 1978, there is a better chance of understanding what is likely to happen if rainfall decreases after 1978 if we use the information contained in the calf survival and adult survival data. To do this, we confront the life history model (with parameters *a, b, f,* and *g*) with the census, calf survival, and adult mortality data using the following code:  
+1. Input rainfall, census, calf survival, and adult mortality data and $N_1$ up to 1978
+```{r survDat}
+wld2<-wld%>%
+  filter(year<1979)
+```
+
