@@ -83,7 +83,10 @@ likelihood <- function(r, k) {
   df <- data.frame(r1 = rep(r, each = length(k)),
                    k1 = rep(k, times = length(r))) %>%
     mutate(like = exp(-r1) * r1^k1 / factorial(k1),
-           ll = log(like)) %>%
+           like = like / min(sqrt(like))) %>%
+             ### this sort of centers the likelihoods to reduce chance of 
+             ### exponent out of bounds errors.  Since it's a linear transformation,
+             ### should divide out in the posterior calculation
     group_by(r1) %>%
     summarize(like = prod(like))
   return(df$like)
