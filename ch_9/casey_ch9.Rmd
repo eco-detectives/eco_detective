@@ -63,23 +63,38 @@ $$f_{post}(r) = \frac{f_{prior}(r) e^{-r} r^k / k!}{\int_0^{\infty} f_{prior}(r'
 
 ``` {r}
 
-r_set <- 3
-k <- rpois(n = 1, lambda = r_set)
+r_true <- 3
+k_vec <- rpois(n = 25, lambda = r_true)
 
 dr <- .1
 rmin <- dr; rmax = 10
 r_vec <- seq(rmin, rmax, dr) ### possible hypotheses for the value of r
 
-### make up a prior distribution for r: say normal around some mean and sd
+### make up a prior distribution for r: say normal around some mean and sd.
+### For a given hypothesis of r, return Pr(R < r).
 f_prior <- function(r, mean = 4, sd = 2) {
   pnorm(r, mean = mean, sd = sd)
 }
 
+### make a function to calculate the likelihood of r given k,
+### i.e. prod(exp(-r) * r^k / k!)
+### for a single r
+likelihood <- function(r, k) {
+  df <- data.frame(r1 = rep(r, each = length(k)),
+                   k1 = rep(k, times = length(r))) %>%
+    mutate(like = exp(-r1) * r1^k1 / factorial(k1),
+           ll = log(like)) %>%
+    group_by(r1) %>%
+    summarize(like = prod(like))
+  return(df$like)
+}
+
+
 ### compute denominator
-denom <- sum(f_prior(r_vec) * exp(-r_vec) * r_vec^k / factorial(k) * dr)
+denom <- sum(f_prior(r_vec) * likelihood(r_vec, k_vec) * dr)
 
 ### compute a vector of numerators, one for each hypothesis
-numer_vec <- f_prior(r_vec) * exp(-r_vec) * r_vec^k / factorial(k)
+numer_vec <- f_prior(r_vec) * likelihood(r_vec, k_vec)
 
 ### compute a vector of probabilities of each r
 post_vec <- numer_vec / denom
