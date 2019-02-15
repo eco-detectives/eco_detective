@@ -1,0 +1,91 @@
+---
+title: 'Eco-Detectives: chapter 9'
+author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
+output: 
+  html_document:
+    code_folding: hide
+    toc: FALSE
+    toc_depth: 3
+    toc_float: yes
+    number_sections: false
+    theme: cerulean
+    highlight: haddock
+    includes: 
+      in_header: '~/github/src/templates/ohara_hdr.html'
+  pdf_document:
+    toc: true
+---
+
+``` {r setup, echo = TRUE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
+
+source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
+
+```
+
+$\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}}$ 
+$\newcommand{\L}{\mathcal{L}} \newcommand{\LL}{\mathcal{L}}$
+
+# Chapter 9: The Confrontation: Bayesian Goodness of Fit
+
+Modeling animal emergence  assuming the number of emergences per unit time (e.g. insects/day) can be modeled as Poisson distribution with rate parameter $r$.
+
+\begin{align*}
+  &\Pr\{data | hypothesis\}\\
+  &= \Pr\{\text{$k$ emergences in a single period | emergence rate is $r$}\}\\
+  &= \Pr\{k | r\} = \frac{e^{-r}r^k}{k!}
+\end{align*}
+
+That last is also an expression of likelihood $\LL\{r|k\} = \Pr\{k|r\}$.  To use the data to make statements about the likelihood of different values of the emergence parameter, we start with Bayes' theorem:
+
+\begin{align*}
+  \Pr\{\text{ rate is $r$ | $k$ emergences }\}
+  &= \frac{\Pr\{\text{$k$ emergences | rate is $r$}\} \text{Prior}\{r\}} {\Pr\{\text{$k$ emergences}\}}
+\end{align*}
+
+Then the numerator indicates probability that we observe $k$ emergences and the rate is approximately $r$, i.e. 
+$$\frac{e^{-r} r^k}{k!} f_{prior}(r)$$
+And the denominator is the probability that we observe $k$ emergences, i.e. summed across all possible hypotheses about the value of $r$:
+
+$$\Pr\{ \text{observe } k \text{ emergences}\} = \int_0^{\infty} \frac{e^{-r'} r'^k}{k!} f_{prior}(r') dr'$$
+
+This gets us to equation 9.16.
+
+## Pseudocode 9.1: Posterior density
+
+1. Specify the data ($k$), minimum $r_{min}$ and maximum $r_{max}$ values of $r$, and step $\Delta r$.
+2. Use equation 9.21 to compute the denominator in equation 9.16.
+$$\sum_{r' = r_{min}(\Delta r)}^{r_{max}} f_{prior}(r') \frac{e^{-r'} (r')^k}{k!} \Delta r$$
+3. Compute the posterior density by cycling over the values of $r$, from $r_{min}$ to $r_{max}$ in steps of $\Delta r$, and using Equation 9.16.
+$$f_{post}(r) = \frac{f_{prior}(r) e^{-r} r^k / k!}{\int_0^{\infty} f_{prior}(r') \frac{e^{-r'} (r')^k}{k!} dr'}$$
+
+``` {r}
+
+r_set <- 3
+k <- rpois(n = 1, lambda = r_set)
+
+dr <- .1
+rmin <- dr; rmax = 10
+r_vec <- seq(rmin, rmax, dr) ### possible hypotheses for the value of r
+
+### make up a prior distribution for r: say normal around some mean and sd
+f_prior <- function(r, mean = 4, sd = 2) {
+  pnorm(r, mean = mean, sd = sd)
+}
+
+### compute denominator
+denom <- sum(f_prior(r_vec) * exp(-r_vec) * r_vec^k / factorial(k) * dr)
+
+### compute a vector of numerators, one for each hypothesis
+numer_vec <- f_prior(r_vec) * exp(-r_vec) * r_vec^k / factorial(k)
+
+### compute a vector of probabilities of each r
+post_vec <- numer_vec / denom
+
+post_vec_cumulative <- cumsum(post_vec * dr)
+
+plot(post_vec ~ r_vec)
+```
+
