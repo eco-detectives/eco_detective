@@ -62,9 +62,9 @@ $$\sum_{r' = r_{min}(\Delta r)}^{r_{max}} f_{prior}(r') \frac{e^{-r'} (r')^k}{k!
 $$f_{post}(r) = \frac{f_{prior}(r) e^{-r} r^k / k!}{\int_0^{\infty} f_{prior}(r') \frac{e^{-r'} (r')^k}{k!} dr'}$$
 
 ``` {r}
-
+set.seed(1234)
 r_true <- 3
-k_vec <- rpois(n = 25, lambda = r_true)
+k_vec <- rpois(n = 2, lambda = r_true)
 
 dr <- .1
 rmin <- dr; rmax = 10
@@ -72,7 +72,7 @@ r_vec <- seq(rmin, rmax, dr) ### possible hypotheses for the value of r
 
 ### make up a prior distribution for r: say normal around some mean and sd.
 ### For a given hypothesis of r, return Pr(R < r).
-f_prior <- function(r, mean = 4, sd = 2) {
+f_prior <- function(r, mean = 4, sd = .5) {
   pnorm(r, mean = mean, sd = sd)
 }
 
@@ -82,8 +82,8 @@ f_prior <- function(r, mean = 4, sd = 2) {
 likelihood <- function(r, k) {
   df <- data.frame(r1 = rep(r, each = length(k)),
                    k1 = rep(k, times = length(r))) %>%
-    mutate(like = exp(-r1) * r1^k1 / factorial(k1),
-           like = like / min(sqrt(like))) %>%
+    mutate(like = exp(-r1) * r1^k1 / factorial(k1)) %>%
+           # like = like / min(sqrt(like))) %>%
              ### this sort of centers the likelihoods to reduce chance of 
              ### exponent out of bounds errors.  Since it's a linear transformation,
              ### should divide out in the posterior calculation
@@ -104,6 +104,7 @@ post_vec <- numer_vec / denom
 
 post_vec_cumulative <- cumsum(post_vec * dr)
 
+mean(k_vec)
 plot(post_vec ~ r_vec)
 ```
 
