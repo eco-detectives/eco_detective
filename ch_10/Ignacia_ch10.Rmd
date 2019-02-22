@@ -1,0 +1,82 @@
+---
+title: 'Chapter 10: Management of hake fisheries in Namibia'
+author: "Ignacia Rivera"
+date: "February 21, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+```
+
+## Pseudocodes {.tabset}
+
+### Pseudocode 10.1 
+
+```{r pseudocode 10.1}
+
+fish <- read.csv(here('ch_10/data/fish.csv'))
+
+# Initial paramaters
+
+r <- 0.4
+K <- 3000
+q <- 0.0005
+sigma <- 0.13
+
+
+# Function to estimate biomass for a given period based on surplus production model
+
+calc.surplus.production <- function(B.t, catch.t, r, K, q) {
+
+  B.t.1 <- B.t + r * B.t * (1 - B.t / K) - catch.t
+  return(B.t.1)
+}
+
+# Function to estimate vector of biomass and abundance index based on surplus production model
+
+## data is a vector with catch
+est.surplus.production <- function(r, K, q, catch) {
+  
+  yrs = dim(data)[1]
+  B.est <- vector(length = yrs)
+  for(i in 1:yrs) {
+    if(i == 1) {
+      B.est[i] <- K
+    } else {
+      B.est[i] <- calc.surplus.production(B.t = B.est[i - 1], catch.t = catch[i], r, K, q)
+    }
+  }
+  
+  I.est = B.est*q
+  return(I.est)
+}
+
+
+calc_nll_logistic <- function(sigma, N_obs, N_est) {
+  ### pass vector of N_obs and N_est
+  nll <- log(sigma) + .5 * log(2*pi) + (N_obs - N_est)^2 / (2 * sigma^2)
+  return(sum(nll, na.rm = TRUE))
+}
+
+sum_nll_logistic <- function(par, N1, obs_data) {
+  r <- par[1]; K <- par[2]
+  ### create a vector of N_est
+  N_est_vec <- calc_est_logistic(N1, r, K, yrs = nrow(obs_data))
+  ### calc nll of this vector vs model
+  sum_nll <- calc_nll_logistic(obs_data$N_sd, obs_data$N_mean, N_est_vec)
+}
+
+
+## catch is a dataframe with a column of years and a column of catch
+surplus.production <- function (catch, r, K, q, sigma){
+  
+  
+  
+  
+  
+}
+
+```
+
