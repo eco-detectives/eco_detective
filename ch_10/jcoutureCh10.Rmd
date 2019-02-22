@@ -1,0 +1,74 @@
+---
+title: 'Chapter 10: Management of Hake Fisheries in Nimibia'
+author: "Jessica Couture"
+date: "February 22, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+```
+
+## Parameter estimates
+
+Find the values of the parameters that minimize the total negative log-likelihood.  
+
+1) Predict $B_{est}$ and $I_{est}$ from equation 10.17:
+
+$$B_{est,t+1} = B_{est,t} + rB_{est,t}\left(1-\frac{1}{K}B_{est,t}\right)-C_t$$  
+$$B_{est,0} = K$$  
+$$I_{est,t} = qB_{est,t}$$
+Assuming only *observation* uncertainty ($V_t$)
+
+```{r predictB_I}
+
+### bring in data
+
+fish<-read_csv("data/fish.csv")
+
+### starting parameters
+
+r = 0.5 
+K = 2000
+q = 0.001
+sigV = 0.2
+
+fish$Best<-as.numeric(NA)
+fish$Iest<-as.numeric(NA)
+
+predB_I<-function(r,K,q,dat){
+  
+  for(i in 1:nrow(fish)){
+    
+    dat$Best[i] <- if(i==1){
+                    K+r*K*(1-(1/K)*K)-dat$catch[i]
+      }
+    else{
+      dat$Best[i-1]+r*dat$Best[i-1]*(1-(1/K)*dat$Best[i-1])-dat$catch[i]
+    }
+                    
+    dat$Iest[i] <- q*dat$Best[i]
+  
+   #i=i+1
+    return(dat)
+    
+    }
+}
+
+fishEst<-predB_I(r,K,q,fish)
+
+head(fishEst)
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
