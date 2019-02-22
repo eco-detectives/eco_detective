@@ -8,44 +8,37 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(here)
+library(tidyverse)
 ```
 
 ## Pseudocodes {.tabset}
 
 ### Pseudocode 10.1 
 
-```{r pseudocode 10.1}
+```{r functions pseudocode 10.1}
 
-fish <- read.csv(here('ch_10/data/fish.csv'))
-
-# Initial paramaters
-
-r <- 0.4
-K <- 3000
-q <- 0.0005
-sigma <- 0.13
-
+# Based on Casey's code for ch_8
 
 # Function to estimate biomass for a given period based on surplus production model
 
-calc.surplus.production <- function(B.t, catch.t, r, K, q) {
+calc.surplus.production <- function(B.t, catch.t, r, K) {
 
   B.t.1 <- B.t + r * B.t * (1 - B.t / K) - catch.t
   return(B.t.1)
 }
 
-# Function to estimate vector of biomass and abundance index based on surplus production model
+# Function to estimate vector of Abundance index based on surplus production model
 
-## data is a vector with catch
+## catch is a vector with catch
 est.surplus.production <- function(r, K, q, catch) {
   
-  yrs = dim(data)[1]
+  yrs = length(catch)
   B.est <- vector(length = yrs)
   for(i in 1:yrs) {
     if(i == 1) {
       B.est[i] <- K
     } else {
-      B.est[i] <- calc.surplus.production(B.t = B.est[i - 1], catch.t = catch[i], r, K, q)
+      B.est[i] <- calc.surplus.production(B.t = B.est[i - 1], catch.t = catch[i], r, K)
     }
   }
   
@@ -54,29 +47,45 @@ est.surplus.production <- function(r, K, q, catch) {
 }
 
 
-calc_nll_logistic <- function(sigma, N_obs, N_est) {
+calc.nll <- function(sigma, I.est, I.obs) {
   ### pass vector of N_obs and N_est
-  nll <- log(sigma) + .5 * log(2*pi) + (N_obs - N_est)^2 / (2 * sigma^2)
+  nll <- log(sigma) + .5 * log(2*pi) + (log(I.est) - log(I.obs))^2 / (2 * sigma^2)
   return(sum(nll, na.rm = TRUE))
 }
 
-sum_nll_logistic <- function(par, N1, obs_data) {
-  r <- par[1]; K <- par[2]
-  ### create a vector of N_est
-  N_est_vec <- calc_est_logistic(N1, r, K, yrs = nrow(obs_data))
+sum.nll.surplus.production <- function(par, catch, I.obs) {
+  r <- par[1]; K <- par[2]; q <- par[3]; sigma<- par[4]
+  ### create a vector of I.est
+  I.est <- est.surplus.production (r, K, q, catch)
   ### calc nll of this vector vs model
-  sum_nll <- calc_nll_logistic(obs_data$N_sd, obs_data$N_mean, N_est_vec)
+  sum.nll <- calc.nll(sigma, I.est, I.obs)
 }
 
 
-## catch is a dataframe with a column of years and a column of catch
-surplus.production <- function (catch, r, K, q, sigma){
-  
-  
-  
-  
-  
-}
+```
+
+```{r numerical optimization  pseudocode 10.1}
+
+data <- read_csv(here('ch_10/data/fish.csv')) 
+
+catch <- data$catch
+I.obs <- data$cpue
+
+### choose some starting values
+r.vec  <- seq(.1, .9, .05) 
+K.vec <- seq(1000, 5000, 500)
+q.vec <- seq(0.0004, 0.0005, 0.00005)
+sigma.vec <- seq(0.08, 0.15, 0.05)
+
+par.df <- crossing(r.vec, K.vec, q.vec, sigma.vec) %>%
+  setNames(c('r', 'K', 'q', 'sigma'))
+
+nll.df <- par.df %>%
+  rowwise() %>%
+  mutate(nll = sum.nll.surplus.production(par = c(r, K, q, sigma), catch, I.obs)) %>%
+  ungroup()
+
+which.min(nll.df$nll)
 
 ```
 
