@@ -1,0 +1,302 @@
+---
+title: 'Eco-Detectives: chapter 10'
+author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
+output: 
+  html_document:
+    code_folding: hide
+    toc: FALSE
+    toc_depth: 3
+    toc_float: yes
+    number_sections: false
+    theme: cerulean
+    highlight: haddock
+    includes: 
+      in_header: '~/github/src/templates/ohara_hdr.html'
+  pdf_document:
+    toc: true
+---
+
+``` {r setup, echo = TRUE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
+
+source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
+
+```
+
+$\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}}$ 
+$\newcommand{\L}{\mathcal{l}} \newcommand{\LL}{\mathcal{L}}$
+
+## Pseudocode 10.1
+
+1. Input catch and CPUE data.
+2. Input starting estimates of $r, K, q, \sigma_{\nu}$.
+3. Find vals of params that minimize total NLL:
+    a. predict $B_{est}$ and $I_{est}$ from eq 10.17
+    b. calc NLL using 10.18
+    c. sum NLL over all years
+    d. minimize total NLL.
+    
+Equation 10.17:
+\begin{align*}
+  B_{est, t+1} &= B_{est, t} + r B_{est, t} \left( 1 - \frac{1}{K}B_{est, t} \right) - C_t,\\
+  B_{est, 0} &= K, \\
+  I_{est, t} &= qB_{est, t}
+\end{align*}
+
+Equation 10.18:
+\begin{align*}
+  \LL_t = \log(\sigma_{\nu}) + \frac{1}{2} \log(2 \pi) + \frac{[\log I_{est, t} - \log I_t]^2}{2\sigma_{\nu}^2}
+\end{align*}
+
+Book values: $r = .39, K = 2709, q = .00045, \sigma_{\nu} = .12, MSY = 266$.
+
+``` {r function to calc biomass time series}
+
+calc_b_tplus1 <- function(B_t, r, K, C_t) {
+  b_tplus1 <- B_t * (1 + r * (1 - B_t/K)) - C_t
+  b_tplus1 <- ifelse(b_tplus1 < 0, 0, b_tplus1)
+  return(b_tplus1)
+}
+calc_b_timeseries <- function(r, K, C_vec) {
+  ### C_vec is the vector of catch data, 1 for each year of data
+  B_vec <- vector(length = length(C_vec) + 1)
+  
+  B_vec[1] <- K
+  
+  for(t in 1:length(C_vec)) {
+    B_vec[t+1] <- calc_b_tplus1(B_vec[t], r, K, C_vec[t])
+  }
+  
+  return(B_vec[1:length(C_vec)])
+    ### truncate B_vec to match length of dataset, i.e. drop last B_t+1
+}
+```
+
+``` {r function to calculate neg log likelihood of series}
+
+calc_nll <- function(I_est, I_t, sig_nu) {
+  nll <- log(sig_nu) + .5 * log(2 * pi) + (log(I_est) - log(I_t))^2 / (2 * sig_nu^2)
+}
+
+```
+
+## Code for optimizing parameters
+
+Note that with a large vector of parameter values, this process can be a bit slow.  I ran the code to find optimal values, then have hard coded those into the next code chunk for plotting.
+
+```{r, eval = FALSE}
+
+### read data and set up parameter vectors
+fish_data <- read_csv('data/fish.csv')
+
+year <- fish_data$year
+### first param sequence is a broad search, second is a refined search
+### based on the best neighborhood found in the broad search.
+r <- c(seq(.1, .5, .05), seq(.35, .45, .005))
+K <- c(seq(2000, 3500, 100), seq(2650, 2750, 5))
+q <- c(seq(.0001, .0006, .00005), seq(.00040, .00050, .00001))
+sig_nu <- c(seq(.02, .20, .02), seq(.10, .14, .002))
+
+### set up dataframe of param combinations along with CPUE and catch data.
+### Only use params that go to calculating the B estimates - that is a little
+### processor intensive it loops.  Save q and sig_nu for after that calculation
+### since B_est does not depend on these.
+param_df <- crossing(r, K, year) %>%
+  left_join(fish_data, by = 'year') 
+
+### using params, estimate time series of biomass
+est_df <- param_df %>%
+  group_by(r, K) %>%
+  mutate(B_est = calc_b_timeseries(r, K, C_vec = catch))
+
+### add in q and sig_nu, then use these to determine sum NLL
+nll_param_df <- crossing(est_df, q, sig_nu) %>%
+  mutate(I_est = q * B_est,
+         nll   = calc_nll(I_est, I_t = cpue, sig_nu)) %>%
+  group_by(r, K, q, sig_nu) %>%
+  summarize(sum_nll = sum(nll)) %>%
+  ungroup()
+
+```
+
+A broad search along parameters shows $r = .40, K = 2700, q = .00045, \sigma_\nu = .12$
+I refine the search with a narrow window around each of these values, and find more precise estimates: $r = .395, K = 2705, q = .00045, \sigma_\nu = .124$.  These are very close to those listed in the book; perhaps with improved processing power the authors could have run more refined parameter searches and ight have then reached these same results.
+
+### Plot Schaefer model using these parameters
+
+```{r}
+
+# nll_best <- nll_param_df %>%
+#   filter(sum_nll == min(sum_nll))
+# 
+# r_best <- nll_best$r
+# K_best <- nll_best$K
+# q_best <- nll_best$q
+# sig_best <- nll_best$sig_nu
+
+r_best <- .395
+K_best <- 2705
+q_best <- .00045
+sig_nu_best <- .124
+
+### read data and set up parameter vectors
+fish_data <- read_csv('data/fish.csv') %>%
+  mutate(B_est = calc_b_timeseries(r = r_best, K = K_best, C_vec = catch),
+         I_est = q_best * B_est)
+
+ggplot(fish_data, aes(x = year)) +
+  ggtheme_plot() +
+  geom_hline(yintercept = 0) +
+  geom_point(aes(y = cpue)) +
+  geom_line(aes(y = I_est))
+
+```
+
+
+## Pseudocode 10.2
+
+Now look at levels of uncertainty around $r$ and $K$ and through them the certainty around the values of $MSY$.  Punt (1988) derived an analytic solution for the estimate of $q$.  Given $r$, $K$, and $n$ time periods, the estimate of $q$ that minimizes the negative log likelihood is Equation 10.19:
+
+$$\hat q = \exp \left( \frac{1}{n} \sum_{i=1}^n (\log I_t - \log B_{est, t}) \right)$$
+
+1. Input catch and CPUE data.
+2. Input starting estimates of $K$ and $\sigma_\nu$ and the desired range and step size for $r$.
+3. Systematically loop over values of $r$.
+4. For each value of $r$, find the values of $K$ and $\sigma_\nu$ that minimize NLL, as previously done (in pseudocode 10.1?), except $r$ is fixed at the value from step 3 and eq'n 10.19 is used for $q$.
+5. For each value of $r$, calculate the value of the $\chi^2$ distribution.
+
+```{r define q_hat function}
+calc_q_hat <- function(I_vec, B_est_vec) {
+  n <- length(I_vec)
+  sum_term <- 1/n * sum(log(I_vec) - log(B_est_vec))
+  q_hat <- exp(sum_term)
+  return(q_hat)
+}
+```
+
+```{r}
+
+fish_data <- read_csv('data/fish.csv')
+
+year <- fish_data$year
+
+r <- seq(.30, .5, .003)
+K <- seq(2300, 3300, 10)
+sig_nu <- seq(.10, .14, .002)
+
+
+param_df2 <- crossing(r, K, year) %>%
+  left_join(fish_data, by = 'year') 
+
+### using params, estimate time series of biomass
+est_df2 <- param_df2 %>%
+  group_by(r, K) %>%
+  mutate(B_est = calc_b_timeseries(r, K, C_vec = catch),
+         q_hat = calc_q_hat(I_vec = cpue, B_est_vec = B_est)) %>%
+  ungroup() %>%
+  filter(!is.infinite(q_hat))
+
+### add in sig_nu, then use these to determine sum NLL
+nll_param_df2 <- crossing(est_df2, sig_nu) %>%
+  mutate(I_est = q_hat * B_est,
+         nll   = calc_nll(I_est, I_t = cpue, sig_nu)) %>%
+  group_by(r, K, q_hat, sig_nu) %>%
+  summarize(sum_nll = sum(nll)) %>%
+  ungroup()
+
+```
+
+From this dataframe, plot $r$ and $K$ plots.  The green box indicates the range of the 95% confidence interval.
+
+### Plot $r$ vs. $\chi^2$ probability (top) and NLL (btm)
+
+``` {r plot r vs chisq}
+r_optim <- nll_param_df2 %>%
+  group_by(r) %>%
+  filter(sum_nll == min(sum_nll) & sum_nll < 0) %>%
+  ungroup() %>%
+  mutate(nll_diff = 2 * (sum_nll - min(sum_nll)),
+         chi_sq_r = pchisq(nll_diff, 1),
+         conf_int = chi_sq_r < 0.95) %>%
+  gather(key, value, sum_nll, chi_sq_r)
+
+ci_range <- r_optim %>% filter(conf_int) %>% .$r %>% range()
+
+ggplot(r_optim, aes(x = r, y = value)) +
+  ggtheme_plot() +
+  annotate('rect', fill = 'darkgreen', alpha = .2,
+           xmin = ci_range[1], xmax = ci_range[2], ymin = -Inf, ymax = Inf) +
+  geom_line() +
+  facet_wrap( ~ key, ncol = 1, scales = 'free_y')
+```
+
+### Plot $K$ vs. $\chi^2$ probability (top) and NLL (btm)
+
+``` {r plot K vs chisq}
+k_optim <- nll_param_df2 %>%
+  group_by(K) %>%
+  filter(sum_nll == min(sum_nll) & sum_nll < 0) %>%
+  ungroup() %>%
+  mutate(nll_diff = 2 * (sum_nll - min(sum_nll)),
+         chi_sq_K = pchisq(nll_diff, 1),
+         conf_int = chi_sq_K < 0.95) %>%
+  gather(key, value, sum_nll, chi_sq_K)
+
+ci_range <- k_optim %>% filter(conf_int) %>% .$K %>% range()
+
+ggplot(r_optim, aes(x = K, y = value)) +
+  ggtheme_plot() +
+  annotate('rect', fill = 'darkgreen', alpha = .2,
+           xmin = ci_range[1], xmax = ci_range[2], ymin = -Inf, ymax = Inf) +
+  geom_line() +
+  facet_wrap( ~ key, ncol = 1, scales = 'free_y')
+```
+
+## Estimating uncertainty around MSY
+
+Redefine model using $r$ and $MSY (= rK/4)$.  Just calculating MSY after the NLL calculations doesn't seem to work correctly.
+
+```{r}
+
+MSY <- seq(100, 400, 5)
+
+param_df_msy <- crossing(r, MSY, year) %>%
+  left_join(fish_data, by = 'year') 
+
+### using params, estimate time series of biomass
+est_df_msy <- param_df_msy %>%
+  group_by(r, MSY) %>%
+  mutate(K = 4 * MSY / r,
+         B_est = calc_b_timeseries(r, K, C_vec = catch),
+         q_hat = calc_q_hat(I_vec = cpue, B_est_vec = B_est)) %>%
+  ungroup() %>%
+  filter(!is.infinite(q_hat))
+
+### add in sig_nu, then use these to determine sum NLL
+nll_param_df_msy <- crossing(est_df_msy, sig_nu) %>%
+  mutate(I_est = q_hat * B_est,
+         nll   = calc_nll(I_est, I_t = cpue, sig_nu)) %>%
+  group_by(r, MSY, q_hat, sig_nu) %>%
+  summarize(sum_nll = sum(nll)) %>%
+  ungroup()
+
+msy_optim <- nll_param_df_msy %>%
+  group_by(MSY) %>%
+  filter(sum_nll == min(sum_nll) & sum_nll < 0) %>%
+  ungroup() %>%
+  mutate(nll_diff = 2 * (sum_nll - min(sum_nll)),
+         chi_sq_MSY = pchisq(nll_diff, 1),
+         conf_int = chi_sq_MSY < 0.95) %>%
+  gather(key, value, sum_nll, chi_sq_MSY)
+
+ci_range <- msy_optim %>% filter(conf_int) %>% .$MSY %>% range()
+
+ggplot(msy_optim, aes(x = MSY, y = value)) +
+  ggtheme_plot() +
+  annotate('rect', fill = 'darkgreen', alpha = .2,
+           xmin = ci_range[1], xmax = ci_range[2], ymin = -Inf, ymax = Inf) +
+  geom_line() +
+  facet_wrap( ~ key, ncol = 1, scales = 'free_y')
+```
