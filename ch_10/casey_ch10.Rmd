@@ -25,13 +25,12 @@ source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
 
 ```
 
-$\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}}$ 
-$\newcommand{\L}{\mathcal{l}} \newcommand{\LL}{\mathcal{L}}$
+$\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}} \newcommand{\L}{\mathscr{L}} \newcommand{\LL}{\mathcal{L}}$
 
 ## Pseudocode 10.1
 
 1. Input catch and CPUE data.
-2. Input starting estimates of $r, K, q, \sigma_{\nu}$.
+2. Input starting estimates of $r, K, q, \sigma_V$.
 3. Find vals of params that minimize total NLL:
     a. predict $B_{est}$ and $I_{est}$ from eq 10.17
     b. calc NLL using 10.18
@@ -76,8 +75,8 @@ calc_b_timeseries <- function(r, K, C_vec) {
 
 ``` {r function to calculate neg log likelihood of series}
 
-calc_nll <- function(I_est, I_t, sig_nu) {
-  nll <- log(sig_nu) + .5 * log(2 * pi) + (log(I_est) - log(I_t))^2 / (2 * sig_nu^2)
+calc_nll <- function(I_est, I_t, sig_V) {
+  nll <- log(sig_V) + .5 * log(2 * pi) + (log(I_est) - log(I_t))^2 / (2 * sig_V^2)
 }
 
 ```
@@ -97,11 +96,11 @@ year <- fish_data$year
 r <- c(seq(.1, .5, .05), seq(.35, .45, .005))
 K <- c(seq(2000, 3500, 100), seq(2650, 2750, 5))
 q <- c(seq(.0001, .0006, .00005), seq(.00040, .00050, .00001))
-sig_nu <- c(seq(.02, .20, .02), seq(.10, .14, .002))
+sig_V <- c(seq(.02, .20, .02), seq(.10, .14, .002))
 
 ### set up dataframe of param combinations along with CPUE and catch data.
 ### Only use params that go to calculating the B estimates - that is a little
-### processor intensive it loops.  Save q and sig_nu for after that calculation
+### processor intensive it loops.  Save q and sig_V for after that calculation
 ### since B_est does not depend on these.
 param_df <- crossing(r, K, year) %>%
   left_join(fish_data, by = 'year') 
@@ -111,18 +110,18 @@ est_df <- param_df %>%
   group_by(r, K) %>%
   mutate(B_est = calc_b_timeseries(r, K, C_vec = catch))
 
-### add in q and sig_nu, then use these to determine sum NLL
-nll_param_df <- crossing(est_df, q, sig_nu) %>%
+### add in q and sig_V, then use these to determine sum NLL
+nll_param_df <- crossing(est_df, q, sig_V) %>%
   mutate(I_est = q * B_est,
-         nll   = calc_nll(I_est, I_t = cpue, sig_nu)) %>%
-  group_by(r, K, q, sig_nu) %>%
+         nll   = calc_nll(I_est, I_t = cpue, sig_V)) %>%
+  group_by(r, K, q, sig_V) %>%
   summarize(sum_nll = sum(nll)) %>%
   ungroup()
 
 ```
 
-A broad search along parameters shows $r = .40, K = 2700, q = .00045, \sigma_\nu = .12$
-I refine the search with a narrow window around each of these values, and find more precise estimates: $r = .395, K = 2705, q = .00045, \sigma_\nu = .124$.  These are very close to those listed in the book; perhaps with improved processing power the authors could have run more refined parameter searches and ight have then reached these same results.
+A broad search along parameters shows $r = .40, K = 2700, q = .00045, \sigma_V = .12$
+I refine the search with a narrow window around each of these values, and find more precise estimates: $r = .395, K = 2705, q = .00045, \sigma_V = .124$.  These are very close to those listed in the book; perhaps with improved processing power the authors could have run more refined parameter searches and ight have then reached these same results.
 
 ### Plot Schaefer model using these parameters
 
@@ -134,12 +133,12 @@ I refine the search with a narrow window around each of these values, and find m
 # r_best <- nll_best$r
 # K_best <- nll_best$K
 # q_best <- nll_best$q
-# sig_best <- nll_best$sig_nu
+# sig_best <- nll_best$sig_V
 
 r_best <- .395
 K_best <- 2705
 q_best <- .00045
-sig_nu_best <- .124
+sig_V_best <- .124
 
 ### read data and set up parameter vectors
 fish_data <- read_csv('data/fish.csv') %>%
@@ -162,9 +161,9 @@ Now look at levels of uncertainty around $r$ and $K$ and through them the certai
 $$\hat q = \exp \left( \frac{1}{n} \sum_{i=1}^n (\log I_t - \log B_{est, t}) \right)$$
 
 1. Input catch and CPUE data.
-2. Input starting estimates of $K$ and $\sigma_\nu$ and the desired range and step size for $r$.
+2. Input starting estimates of $K$ and $\sigma_V$ and the desired range and step size for $r$.
 3. Systematically loop over values of $r$.
-4. For each value of $r$, find the values of $K$ and $\sigma_\nu$ that minimize NLL, as previously done (in pseudocode 10.1?), except $r$ is fixed at the value from step 3 and eq'n 10.19 is used for $q$.
+4. For each value of $r$, find the values of $K$ and $\sigma_V$ that minimize NLL, as previously done (in pseudocode 10.1?), except $r$ is fixed at the value from step 3 and eq'n 10.19 is used for $q$.
 5. For each value of $r$, calculate the value of the $\chi^2$ distribution.
 
 ```{r define q_hat function}
@@ -184,7 +183,7 @@ year <- fish_data$year
 
 r <- seq(.30, .5, .003)
 K <- seq(2300, 3300, 10)
-sig_nu <- seq(.10, .14, .002)
+sig_V <- seq(.10, .14, .002)
 
 
 param_df2 <- crossing(r, K, year) %>%
@@ -198,11 +197,11 @@ est_df2 <- param_df2 %>%
   ungroup() %>%
   filter(!is.infinite(q_hat))
 
-### add in sig_nu, then use these to determine sum NLL
-nll_param_df2 <- crossing(est_df2, sig_nu) %>%
+### add in sig_V, then use these to determine sum NLL
+nll_param_df2 <- crossing(est_df2, sig_V) %>%
   mutate(I_est = q_hat * B_est,
-         nll   = calc_nll(I_est, I_t = cpue, sig_nu)) %>%
-  group_by(r, K, q_hat, sig_nu) %>%
+         nll   = calc_nll(I_est, I_t = cpue, sig_V)) %>%
+  group_by(r, K, q_hat, sig_V) %>%
   summarize(sum_nll = sum(nll)) %>%
   ungroup()
 
@@ -274,11 +273,11 @@ est_df_msy <- param_df_msy %>%
   ungroup() %>%
   filter(!is.infinite(q_hat))
 
-### add in sig_nu, then use these to determine sum NLL
-nll_param_df_msy <- crossing(est_df_msy, sig_nu) %>%
+### add in sig_V, then use these to determine sum NLL
+nll_param_df_msy <- crossing(est_df_msy, sig_V) %>%
   mutate(I_est = q_hat * B_est,
-         nll   = calc_nll(I_est, I_t = cpue, sig_nu)) %>%
-  group_by(r, MSY, q_hat, sig_nu) %>%
+         nll   = calc_nll(I_est, I_t = cpue, sig_V)) %>%
+  group_by(r, MSY, q_hat, sig_V) %>%
   summarize(sum_nll = sum(nll)) %>%
   ungroup()
 
@@ -300,3 +299,272 @@ ggplot(msy_optim, aes(x = MSY, y = value)) +
   geom_line() +
   facet_wrap( ~ key, ncol = 1, scales = 'free_y')
 ```
+
+See the text for results of running this Schaefer model with observation and process uncertainty.
+
+## LRSG Model
+
+Lagged recruitment, survival, and growth model (LRSG) with observation uncertainty:
+
+* $L = 4$ based on biology of hake (does it take 4 years for hake to reach maturity?)
+* Minimizing NLL we find $B_0 = 3216, s= 0.87, z = 0.99, q = 0.00040$.  
+* NLL = -16.88, slightly better than the Schaefer model (-15.56)
+* Parameter estimates make biological sense: natural mortality of hake is about 20%, but body mass increases by about 10% per year, so $s = 0.87$ is close to what we'd expect. Biology of hake says recruitment is basically constant, so $z = 0.99$ makes sense.
+
+Finding likelihood profile of MSY is difficult since there's no simple relationship between any individual model parameter and MSY.  So we can add a penalty to the NLL based on proximity of estimated MSY to a target MSY in the profile:
+$$F(B_o, s, z) = \sum_t \LL_t + c_p [MSY(B_0, s, z) - MSY_{profile}]^2$$
+where penalty cost $c_p$ is chosen so that deviations from target MSY are on the same magnitude as the NLL.
+
+Note: Can't compare LRSG and Schaefer using likelihood ratio test, since they are not nested models - so instead can use AIC.  LRSG has one more free parameter than Schaefer (assume lag time is known), so NLL needs to be about 2 better than Schaefer to be an improvement.  But as stated before, $NLL_{Schaefer} = -15.56$, and $NLL_{LRSG} = -16.88$, not two points better, so Schaefer is best fit.  But if uncertainty is the question, Schaefer is simpler and doesn't take into account all known info about the species.  Thus, Bayesian!
+
+## Pseudocode 10.3: Bayesian analysis of LRSG parameters
+
+We can set priors on the parameters from our existing knowledge of hake.  Hake generally show little reduction in recruitment with reductions in spawning biomass, so steepness $z$ should be close to 1.  Survival is about 80%, and increase in mass per year is about 10%, to inform $s$.
+
+The Bayesian analysis requires integrating over the five parameters and specifying a prior for each: $B_0, s, z, \sigma_V, q$.  We can take a shortcut on $\sigma_V$ and $q$ using analytically derived formulas.
+
+Pseudocode for Monte Carlo-Bayesian integration of LRSG model:
+
+1. Input catch and CPUE data.
+2. Input high and low values for $B_0, s, z$.
+3. Randomly draw values of $B_0, s, z$ from prior distributions. (are these thought to be uniformly distributed across the high/low values set up in 2? what if normal?)
+4. Project stock biomass forward using these params (eqns 10.9-10.11).
+5. Calc values of $q$ and $\sigma_V$ that maximize likelihood.
+    * I am not seeing the formula for an analytical solution to $\sigma_V$ to minimize NLL.
+6. Calculate MSY based on these params.
+7. Repeat steps 3-6 a bunch of times (10,000x in the text).
+8. Divide the outputs of interest ($B_0, s, z, MSY$) into discrete intervals and calculate the proportion of the total likelihood that falls within each interval.  Make sure you use total likelihood and not negative log-likelihood.
+
+### Some formulas
+
+Biomass in the next year as the balance between survival $s$, recruitment $R_t$, catch $C_t$:
+$$B_{t+1} = sB_t + R_t - C_t \hspace{20pt}(10.9)$$
+Recruitment (to vulnerable class) as a function of biomass $L$ years prior:
+$$R_t = \frac{B_{t-L}}{a + B_{t-L}} \hspace{20pt}(10.10)$$
+$$R_0 = B_0(1 - s) \hspace{20pt}(10.11)$$
+__NOTE:__ This equation for $R_t$ might be wrong.  $R_0$ tells us that recruitment at steady state balances mortality.  This equation for $R_t$ just gives a fraction that will always be less than 1.  Looking at eqn 10.13 maybe it should be:
+$$R_t = \frac{B_{t-L}}{a + bB_{t-L}}$$
+<!-- Looking up the Beverton Holt stock recruitment model [here](http://www.flr-project.org/FLCore/reference/SRModels.html) tells us a different formula: -->
+<!-- $$R = \frac{aS}{b + S}$$ -->
+<!-- where $S$ is presumably stock size (biomass); according to the page, "$a$ is the maximum recruitment (asymptotically) and $b$ is the stock level needed to produce the half of maximum recruitment $a/2$. $(a, b > 0)$."  If this is accurate, and $a$ is recruitment in biomass, then the formula returns units of biomass.  These $a$ and $b$ params might be different from what Hilborn and Mangel describe. -->
+
+<!-- [Another source](http://derekogle.com/fishR/examples/oldFishRVignettes/StockRecruit.pdf) tells us another different answer: -->
+<!-- $$\EE[R|S] = \frac{aS}{1 + bS}$$ -->
+<!-- and explains the parameters: -->
+
+<!-- > $a$ is still the density-independent parameter that is proportional to fecundity. The units of $a$ are “recruitment per spawner” and the value of $a$ is the slope of the model near $S = 0$. However, $b$ is a density-dependent parameter that is proportional to both fecundity and density-dependent mortality (Quinn II and Deriso 1999). If density-dependence in the stockrecruitment relationship does not exist, then $b = 0$ and [the formula above] reduces to the density-independent model. -->
+
+### Define functions
+
+```{r set priors as functions}
+### allowing the functions to return more than one draw might facilitate vectorization later on
+B_draw <- function(n = 1) runif(n, min = 2000, max = 4500)
+s_draw <- function(n = 1) runif(n, min = .6, max = 1)
+z_draw <- function(n = 1) runif(n, min = .8, max = 1)
+
+```
+
+```{r set up biomass time series functions for LRSG}
+calc_a <- function(B_0, R_0, z) {
+  a <- B_0/R_0 * (1 - (z - 0.2) / (0.8 * z))
+}
+calc_b <- function(R_0, z) {
+  b <- (z - 0.2) / (0.8 * z * R_0)
+}
+calc_R_t <- function(B_t_L, a, b = 0) {
+  ### see note above.
+  # R_t <- (B_t_L) / (a + B_t_L) ### this can't be recruitment - always less than 1.
+  # R_t <- R_0 * (B_t_L) / (a + B_t_L) 
+  R_t <- B_t_L / (a + b * B_t_L) ### Try this one... based on eqn 10.13
+}
+calc_R_0 <- function(B_0, s) {
+  ### At steady state, recruitment just balances mortality.
+  R_0 <- B_0 * (1 - s)
+}
+
+calc_B_MSY <- function(a, b, s) {
+  B_MSY <- 1/b * sqrt(a / (1 - s) - a)
+}
+calc_MSY <- function(a, b, s) {
+  B_MSY <- calc_B_MSY(a, b, s)
+  MSY <- B_MSY * (s - 1 + 1/(a + b*B_MSY))
+  return(MSY)
+}
+
+```
+
+```{r}
+
+calc_lrsg_tplus1 <- function(B_t, s, R_t, C_t) {
+  ### use max to ensure B_tplus1 is not negative
+  B_tplus1 <- max(s * B_t + R_t - C_t, 0)
+  
+}
+
+calc_lrsg_timeseries <- function(B_0, s, z, C_vec) {
+  ### B_0 <- 3000; s <- .8; z <- .99; C_vec <- fish_data$catch
+  L <- 4 ### assumed from knowledge of hake
+  
+  years <- length(C_vec)
+  B_vec <- vector(length = years + 1)
+  B_vec[1] <- B_0
+  
+  R_0 <- calc_R_0(B_0, s)
+  a   <- calc_a(B_0, R_0, z)
+  b   <- calc_b(R_0, z)
+  
+  for(t in 1:years) {
+    ### If we are in a time period when t - L is less than 1, then
+    ### assume R is R_0; otherwise use R_t
+    R_t <- ifelse(t - L < 1, R_0, calc_R_t(B_vec[t - L], a, b))
+    # cat('R_t = ', R_t, 'a = ', a, '\n')
+    B_vec[t+1] <- calc_lrsg_tplus1(B_vec[t], s, R_t, C_vec[t])
+  }
+  
+  B_df <- data.frame(B_est = B_vec[1:years],
+                     B_MSY = calc_B_MSY(a, b, s),
+                     MSY   = calc_MSY(a, b, s))
+  
+  return(B_df)
+}
+
+calc_sig_V <- function(cpue, q_hat, B_est) {
+  
+  if(is.infinite(q_hat)) return(NA)
+  
+  sig_vec <- seq(.08, .14, .002)
+  
+  df <- data.frame(year = 1:length(cpue), cpue, I_est = q_hat * B_est) %>%
+    crossing(sig_V = sig_vec) %>%
+    mutate(nll = log(sig_V) + .5 * log(2*pi) + (log(I_est) - log(cpue))^2 / (2 * sig_V^2)) %>%
+    group_by(sig_V) %>%
+    summarize(sum_nll = sum(nll))
+  
+  if(all(is.infinite(df$sum_nll))) return(Inf)
+  
+  sig_V_min <- df %>%
+    filter(sum_nll == min(sum_nll)) %>%
+    .$sig_V
+  
+  return(sig_V_min)
+}
+
+```
+
+### Run Monte Carlo loop
+
+```{r loop with random param draws}
+
+fish_data <- read_csv('data/fish.csv')
+C_vec <- fish_data$catch
+cpue  <- fish_data$cpue
+
+sims <- 50000
+sim_results <- vector('list', length = sims)
+
+ptm <- proc.time()
+for(sim in 1:sims) { ### sim <- 1
+  B_0 <- B_draw()
+  s   <- s_draw()
+  z   <- z_draw()
+  
+  if(sim %% 100 == 0) message(sim, ' of ', sims) ### keep track of iterations
+  # cat('Sim: ', sim, '... B, s, z: ', round(B), round(s, 3), round(z, 3), '\n')
+  
+  B_df <- calc_lrsg_timeseries(B_0, s, z, C_vec)
+  
+  q_hat <- calc_q_hat(I_vec = fish_data$cpue, B_est_vec = B_df$B_est)
+  
+  sig_V <- calc_sig_V(cpue, q_hat, B_df$B_est)
+  
+  result <- fish_data %>%
+    cbind(B_df) %>%
+    mutate(B_0 = B_0, 
+           s = s, z = z, 
+           q_hat = q_hat,
+           sig_V)
+
+  sim_results[[sim]] <- result
+}
+
+sims_df <- bind_rows(sim_results)
+
+cat('Elapsed time: ', (proc.time() - ptm)[3], 's\n')
+```
+
+### Calculate total likelihoods
+
+Assume index of abundance has log-normal distribution (eqn 10.18) then likelihood is
+$$\L(model|data) = \prod_{t=1}^T \frac{1}{\sqrt{2 \pi \sigma_V^2}}\exp \left( -\frac{(\log I_{est} - \log I_t)^2}{2 \sigma_V^2} \right)$$
+
+```{r calc likelihoods}
+
+calc_L <- function(I_est, I_t, sig_V) {
+  likelihood <- 1/(sqrt(2 * pi * sig_V^2)) * exp(-(log(I_est) - log(I_t))^2 / (2 * sig_V^2))
+}
+
+l_df <- sims_df %>%
+  mutate(I_est = B_est * q_hat) %>%
+  group_by(B_0, s, z, MSY) %>%
+  mutate(likelihood = calc_L(I_est, cpue, sig_V)) %>%
+  summarize(prod_L = prod(likelihood)) %>%
+  ungroup() %>%
+  filter(!is.na(prod_L))
+
+```
+
+```{r}
+
+set_bins <- function(df, param, bins = 30) {
+  quo_param <- quo(param)
+  df1 <- df %>%
+    rename(value = !!param) %>%
+    mutate(bin = ntile(value, n = bins)) %>%
+    group_by(bin) %>%
+    summarize(sum_L = sum(prod_L),
+              value = median(value)) %>%
+    mutate(prop_L = sum_L / sum(sum_L),
+           param = param) %>%
+    select(param, value, prop_L)
+}
+
+ci_df <- l_df %>%
+  gather(param, value, B_0:MSY) %>%
+  group_by(param) %>%
+  mutate(nll = -log(prod_L),
+         nll_diff = 2 * (nll - min(nll)),
+         prob = pchisq(nll_diff, df = 1)) %>%
+  filter(prob < 0.95) %>%
+  summarize(ci_min = min(value),
+            ci_max = max(value))
+
+MSY_bins <- l_df %>%
+  filter(MSY < 600) %>%
+  set_bins('MSY', 30)
+
+B_0_bins <- l_df %>%
+  set_bins('B_0', 30)
+
+s_bins <- l_df %>%
+  set_bins('s', 30)
+
+z_bins <- l_df %>%
+  set_bins('z', 30)
+
+params_df <- bind_rows(MSY_bins, z_bins, s_bins, B_0_bins)
+
+ggplot() +
+  ggtheme_plot() +
+  # xlim(c(0, NA)) + 
+  ylim(c(0, NA)) +
+  geom_rect(data = ci_df, aes(xmin = ci_min, xmax = ci_max), ymin = 0, ymax = Inf,
+            fill = 'darkgreen', alpha = .2) +
+  geom_line(data = params_df, aes(x = value, y = prop_L)) +
+  labs(x = 'parameter value',
+       y = 'likelihood') +
+  facet_wrap( ~ param, scales = 'free')
+
+
+
+```
+
