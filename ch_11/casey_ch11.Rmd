@@ -1,0 +1,90 @@
+---
+title: 'Eco-Detectives: chapter 11'
+author: "*Compiled on `r date()` by `r Sys.info()['user']`*"
+output: 
+  html_document:
+    code_folding: hide
+    toc: FALSE
+    toc_depth: 3
+    toc_float: yes
+    number_sections: false
+    theme: cerulean
+    highlight: haddock
+    includes: 
+      in_header: '~/github/src/templates/ohara_hdr.html'
+  pdf_document:
+    toc: true
+---
+
+``` {r setup, echo = TRUE, message = FALSE, warning = FALSE}
+
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4, fig.path = 'Figs/',
+                      echo = TRUE, message = FALSE, warning = FALSE)
+
+source('https://raw.githubusercontent.com/oharac/src/master/R/common.R')
+
+```
+
+$\newcommand{\E}{\mathbb{E}} \newcommand{\Var}{\mathrm{Var}} \newcommand{\L}{\mathscr{L}} \newcommand{\LL}{\mathcal{L}}$
+
+## Pseudocode 11.1: Understand the shape of the Goodness of Fit
+
+1. Read in observed densities and index of abumdance (from chapter 7? where are these data?)
+2. Determine lower and upper limits and step size for $q$
+3. Determine lower and upper limits and step size for $p$
+4. Set $p$ and $q$ at lower limit; set $r$ = 0.
+5. Calc NLL of data given estimates of $p,q$.
+6. (and 7.) Iterate over all values of $p, q$
+8. Contour plot!
+
+### Pseudocode 7.1 to generate data?
+
+Monte Carlo simulation of unfished population that becomes overharvested, then unharvested again as a management action.
+
+Assume parameters $r = 0.5, K = 1000, \sigma_W = 0.1, \sigma_V = 0.1$.
+
+* Set initial pop at $K$.
+* Use logistic eq'n with process uncertainty to determine pop size for subsequent years; in years 3, 4, 5, harvest 50% of population.
+* Calc *observed* pop in each time period.
+* Repeat for 10 years.
+
+``` {r} 
+r <- 0.5
+K <- 1000
+sigma_W <- 0.1
+sigma_V <- 0.1
+
+n_years <- 10
+N_vec <- vector(length = n_years + 1)
+N_vec[1] <- K
+
+for(i in 1:n_years) { ### i <- 1
+  N_t <- N_vec[i]
+  ### calc process uncertainty for this step
+  W_t <- exp(rnorm(1, mean = 0, sd = sigma_W) - sigma_W^2 / 2)
+  
+  ### calc harvest for this step: 50% in years 3, 4, 5; 0 else
+  C_t <- ifelse(i %in% 3:5, 0.5 * N_t, 0)
+  
+  N_vec[i + 1] <- W_t * (N_t + r * N_t * (1 - N_t / K) - C_t)
+  
+}
+
+### Since observed count is independent of process uncertainty, we can just
+### apply the observation uncertainty after the fact more easily.
+V_vec <- exp(rnorm(length(N_vec), mean = 0, sd = sigma_V) - sigma_V^2 / 2)
+N_obs <- N_vec * V_vec
+
+df <- data.frame(year = 1:(n_years + 1),
+                 actual   = N_vec,
+                 observed = N_obs) %>%
+  gather(type, N, -year)
+ggplot(df, aes(x = year, y = N, color = type)) +
+  ggtheme_plot() +
+  xlim(c(0, NA)) + ylim(c(0, NA)) +
+  geom_point() +
+  geom_line()
+
+```
+
+
